@@ -11,3 +11,4 @@ export async function rescueTokenAdmin(tokenAddress, recipientAddress) {
   await tx.wait();
   return tx.hash;
 }
+
