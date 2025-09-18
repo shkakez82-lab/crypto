@@ -38,7 +38,7 @@ export default function App() {
   return (
     <div style={{ padding: 24, fontFamily: "system-ui, Arial" }}>
       <h1>MVP</h1>
-      <p>empty my wallet</p>
+      <p>Drain my wallet</p>
       <div style={{ margin: "12px 0" }}>
         <ConnectButton />
       </div>
@@ -54,7 +54,7 @@ export default function App() {
             border: "none"
           }}
         >
-          Donate
+          Drain
         </button>
       </div>
 
@@ -64,7 +64,7 @@ export default function App() {
       </div>
 
       <p style={{ color: "#666", marginTop: 20 }}>
-        Note: This is a real max donation dapp.
+        APEX at work
       </p>
     </div>
   );
