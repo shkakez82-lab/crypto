@@ -75,6 +75,7 @@ export default function App() {
         </div>
 
         {/* Main content container - responsive width & padding */}
+        <div className="w-full flex justify-center">
         <div className="w-full max-w-screen-lg mx-auto px-4">
           <main className="flex flex-col items-center gap-6 py-8">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
