@@ -130,3 +130,4 @@ export default function App() {
     <Notifications notifications={notifications} />
   </div>
 );
+}
