@@ -3,7 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "@rainbow-me/rainbowkit/styles.css";
-
+import "./index.css";
 import {
   getDefaultWallets,
   RainbowKitProvider,
