@@ -72,10 +72,10 @@ export default function App() {
           <PriceTicker />
         </div>
 
-        {/* Main content wrapper */}
-        <div className="flex justify-center w-full px-4">
-          <div className="w-full max-w-screen-lg">
-            <main className="flex flex-col items-center gap-6 py-8">
+      {/* Main content wrapper */}
+<div className="w-full flex justify-center">
+  <div className="w-full max-w-screen-lg px-4 mx-auto">
+    <main className="flex flex-col items-center gap-6 py-8">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
                 MVP Donation Dapp
               </h1>
