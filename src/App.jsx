@@ -68,14 +68,14 @@ export default function App() {
     <Navbar />
 
     {/* Price ticker */}
-    <div className="pt-[84px]">
-      <div className="container mx-auto max-w-screen-lg px-4">
-        <PriceTicker />
-      </div>
+<div className="pt-[84px]">
+  <div className="max-w-7xl mx-auto px-6">
+    <PriceTicker />
+  </div>
 
-      {/* Main content wrapper */}
-      <div className="container mx-auto max-w-screen-lg px-4">
-        <main className="flex flex-col items-center gap-6 py-8">
+  {/* Main content wrapper */}
+  <div className="max-w-7xl mx-auto px-6">
+    <main className="flex flex-col items-center gap-6 py-8">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
             MVP Donation Dapp
           </h1>
