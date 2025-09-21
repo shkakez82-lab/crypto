@@ -1,3 +1,19 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes marquee {
+  0% { transform: translateX(100%) }
+  100% { transform: translateX(-100%) }
+}
+.animate-marquee {
+  display: inline-flex;
+  min-width: 100%;
+  animation: marquee 30s linear infinite;
+}
+
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
