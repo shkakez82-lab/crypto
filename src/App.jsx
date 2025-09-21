@@ -1,134 +1,28 @@
-// src/App.jsx
-import React, { useState } from "react";
-import { autoDonateMultiChain } from "./engine/donate";
-
+// src/App.jsx (temporary debug)
+import React from "react";
 import Navbar from "./components/Navbar";
-import PriceTicker from "./components/PriceTicker";
-import GuideModal from "./components/GuideModal";
-import Notifications from "./components/Notifications";
-import Footer from "./components/Footer";
-import Background from "./components/Background";
 
-import { useAccount, useWalletClient } from "wagmi";
-
-export default function App() {
-  const [status, setStatus] = useState("idle");
-  const [last, setLast] = useState(null);
-  const [notifications, setNotifications] = useState([]);
-
-  const { isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
-
-  // helper for popup notifications
-  function addNotification(message, type = "info") {
-    const id = Date.now();
-    setNotifications((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, 5000);
-  }
-
-  async function handleDonate() {
-    if (!walletClient) {
-      addNotification("No connected wallet client found. Please connect your wallet.", "error");
-      setLast({ success: false, reason: "No wallet client available." });
-      setStatus("failed");
-      return;
-    }
-
-    try {
-      setStatus("running");
-      addNotification("Donation started… 🚀", "info");
-
-      const res = await autoDonateMultiChain(walletClient);
-      setLast(res);
-
-      if (res.success) {
-        addNotification("Donation completed successfully 🎉", "success");
-        setStatus("done");
-      } else {
-        addNotification(`Donation failed: ${res.reason}`, "error");
-        setStatus("failed");
-      }
-    } catch (e) {
-      console.error(e);
-      setLast({ success: false, reason: e.message });
-      addNotification(`Error: ${e.message}`, "error");
-      setStatus("error");
-    }
-  }
-
+export default function AppDebug() {
   return (
-    <div className="text-white min-h-screen">
-      {/* Background layer */}
-      <Background />
-
-      {/* Navbar */}
+    <div className="min-h-screen bg-[#071428] text-white">
       <Navbar />
 
-      {/* Price ticker */}
-      <div className="pt-[84px]">
-        <div className="w-full">
-          <PriceTicker />
-        </div>
+      {/* leave space for navbar */}
+      <div className="pt-20 w-full">
+        <div className="flex justify-center w-full px-4">
+          <div className="w-full max-w-screen-lg border-2 border-dashed border-white/10 p-8">
+            <h2 className="text-2xl font-bold text-center mb-4">CENTERING TEST</h2>
+            <p className="text-center text-sm text-gray-300 mb-6">
+              This test box should be perfectly centered on desktop and mobile.
+            </p>
 
-      {/* Main content wrapper */}
-<div className="w-full flex justify-center">
-  <div className="w-full max-w-screen-lg px-4 mx-auto">
-    <main className="flex flex-col items-center gap-6 py-8">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
-                MVP Donation Dapp
-              </h1>
-
-              <p className="text-gray-300 text-center text-sm sm:text-base max-w-xl">
-                Donate your tokens across chains in one click — safe, fast, and transparent.
-              </p>
-
-              {/* How it Works + Donate */}
-              <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
-                <div className="flex-shrink-0">
-                  <GuideModal />
-                </div>
-
-                <div className="flex-shrink-0">
-                  {isConnected ? (
-                    <button
-                      onClick={handleDonate}
-                      disabled={status === "running"}
-                      className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
-                    >
-                      {status === "running" ? "Processing…" : "Drain"}
-                    </button>
-                  ) : (
-                    <p className="text-gray-400 italic text-center">
-                      🔌 Connect your wallet to see the donate button
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Status panel */}
-              <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <strong>Status:</strong> <span className="ml-2">{status}</span>
-                  </div>
-                  <div className="text-xs text-gray-400">Dev output</div>
-                </div>
-                <pre className="mt-2 text-xs sm:text-sm whitespace-pre-wrap break-words">
-                  {JSON.stringify(last, null, 2)}
-                </pre>
-              </div>
-            </main>
-
-            {/* Footer */}
-            <Footer />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 bg-white/5 rounded">Left box</div>
+              <div className="p-4 bg-white/5 rounded">Right box</div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Notifications */}
-      <Notifications notifications={notifications} />
     </div>
   );
 }
