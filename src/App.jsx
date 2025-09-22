@@ -132,3 +132,5 @@ return (
     {/* Notifications - positioned absolutely */}
     <Notifications notifications={notifications} />
   </div>
+);
+}
