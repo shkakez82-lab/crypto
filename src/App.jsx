@@ -121,14 +121,14 @@ return (
         </main>
       </div>
 
-      {/* Footer */}
+     
+    </div>
+ {/* Footer */}
       <div className="w-full flex justify-center">
         <div className="px-6 max-w-4xl w-full">
           <Footer />
         </div>
       </div>
-    </div>
-
     {/* Notifications - positioned absolutely */}
     <Notifications notifications={notifications} />
   </div>
