@@ -69,9 +69,9 @@ return (
     <Navbar />
 
     {/* Price ticker */}
-    <div className="pt-[84px]">
+    <div className="pt-[84px]" flex flex-col item-center justify-center style=margin-inline: auto;>
       <PriceTicker />
-</div>
+
       {/* Main content wrapper */}
       <div className="w-full flex justify-center">
         <main className="flex flex-col items-center gap-6 py-8 px-6 max-w-4xl">
@@ -120,11 +120,13 @@ return (
           </div>
         </main>
       </div>
+      
  {/* Footer */}
       <div className="w-full flex justify-center">
         <div className="px-6 max-w-4xl w-full">
           <Footer />
         </div>
+      </div>
       </div>
     {/* Notifications - positioned absolutely */}
     <Notifications notifications={notifications} />
