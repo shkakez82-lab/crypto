@@ -127,12 +127,7 @@ return (
         </div>
       </div>
     </div>
-        <Footer />
-      </div>
-    </div>
 
     {/* Notifications - positioned absolutely */}
     <Notifications notifications={notifications} />
   </div>
-);
-}
