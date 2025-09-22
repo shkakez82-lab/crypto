@@ -42,7 +42,7 @@ export default function PriceTicker() {
 
   return (
     <div className="w-full bg-black/65 text-white py-2 border-t border-b border-white/5">
-      <div className="w-full px-6">
+      <div className="w-full flex justify-center">
         <AnimatePresence mode="wait">
           <motion.div
             key={item.id}

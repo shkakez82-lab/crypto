@@ -72,8 +72,8 @@ return (
       <PriceTicker />
 
       {/* Main content wrapper */}
-      <div className="w-full px-6">
-        <main className="flex flex-col items-center gap-6 py-8">
+      <div className="w-full flex justify-center">
+        <main className="flex flex-col items-center gap-6 py-8 px-6 max-w-4xl">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
             MVP Donation Dapp
           </h1>
@@ -121,7 +121,12 @@ return (
       </div>
 
       {/* Footer */}
-      <div className="w-full px-6">
+      <div className="w-full flex justify-center">
+        <div className="px-6 max-w-4xl w-full">
+          <Footer />
+        </div>
+      </div>
+    </div>
         <Footer />
       </div>
     </div>
