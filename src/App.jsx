@@ -121,10 +121,11 @@ export default function App() {
           </div>
         </main>
 
-        {/* Footer */}
-        <Footer />
+        
       </div>
-    </div>
+{/* Footer */}
+        <Footer />    
+</div>
 
     {/* Notifications */}
     <Notifications notifications={notifications} />
