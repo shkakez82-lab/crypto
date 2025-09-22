@@ -69,7 +69,7 @@ return (
     <Navbar />
 
     {/* Price ticker */}
-    <div className="pt-[84px]" flex flex-col item-center justify-center style={{ marginInline: "auto" }}>
+    <div className="pt-[84px]" flex flex-col item-center justify-center style={{ marginLeft: "50%", marginRight: "50%" }}>
       <PriceTicker />
 
       {/* Main content wrapper */}
