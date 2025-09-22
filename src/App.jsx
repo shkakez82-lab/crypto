@@ -71,7 +71,7 @@ return (
     {/* Price ticker */}
     <div className="pt-[84px]">
       <PriceTicker />
-
+</div>
       {/* Main content wrapper */}
       <div className="w-full flex justify-center">
         <main className="flex flex-col items-center gap-6 py-8 px-6 max-w-4xl">
@@ -120,9 +120,6 @@ return (
           </div>
         </main>
       </div>
-
-     
-    </div>
  {/* Footer */}
       <div className="w-full flex justify-center">
         <div className="px-6 max-w-4xl w-full">
