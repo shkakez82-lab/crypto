@@ -139,3 +139,4 @@ return (
     <Notifications notifications={notifications} />
   </div>
 );
+}
