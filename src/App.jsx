@@ -61,7 +61,7 @@ export default function App() {
   }
 
 return (
-  <div className="text-white flex flex-col item-center justify-center min-h-screen">
+  <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", paddingTop: "84px", placeContent: "center" }}>
     {/* Background layer */}
     <Background />
 
