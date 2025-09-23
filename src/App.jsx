@@ -61,7 +61,7 @@ export default function App() {
   }
 
 return (
-  <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", paddingTop: "84px", placeContent: "center", marginLeft: "50%" }}>
+  <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", paddingTop: "84px", placeContent: "center", margin: "33.33%", width: "800px" }}>
     {/* Background layer */}
     <Background />
 
