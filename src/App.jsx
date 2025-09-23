@@ -61,7 +61,7 @@ export default function App() {
   }
 
 return (
-  <div className="text-white min-h-screen">
+  <div className="text-white flex flex-col item-center justify-center min-h-screen">
     {/* Background layer */}
     <Background />
 
@@ -69,7 +69,7 @@ return (
     <Navbar />
 
     {/* Price ticker */}
-    <div className="pt-[84px]" flex flex-col item-center justify-center style={{ marginLeft: "50%", marginRight: "50%" }}>
+    <div className="pt-[84px]">
       <PriceTicker />
 
       {/* Main content wrapper */}
