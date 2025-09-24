@@ -23,12 +23,12 @@ export default function GuideModal() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-50 bg-black/60">
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.2 }}
-            className="relative bg-white rounded-2xl p-6 w-[90%] max-w-md shadow-lg"
+            className="absolute left-1/2 top-[70px] -translate-x-1/2 bg-white rounded-2xl p-6 w-[90%] max-w-md shadow-lg"
           >
             {/* Close button */}
             <button
