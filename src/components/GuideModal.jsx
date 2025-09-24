@@ -27,28 +27,28 @@ export default function GuideModal() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto"
         >
-          {/* Modal panel: centered, responsive, scrollable if viewport is small */}
+          {/* Modal panel: always centered */}
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ duration: 0.16 }}
-            className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-auto relative shadow-lg"
+            className="relative bg-white rounded-2xl p-6 w-full max-w-md shadow-lg"
             role="dialog"
             aria-modal="true"
           >
-            {/* Close button (inside modal so always visible) */}
+            {/* Close button */}
             <button
               onClick={() => setOpen(false)}
               aria-label="Close guide"
-              className="absolute top-3 right-3 text-slate-600 hover:text-slate-800"
+              className="absolute top-3 right-3 text-slate-600 hover:text-slate-800 text-xl leading-none"
             >
               ×
             </button>
 
-            <h2 className="text-xl font-bold mb-3 text-slate-900">How to Donate</h2>
+            <h2 className="text-xl font-bold mb-4 text-slate-900">How to Donate</h2>
 
             <div className="space-y-3 text-slate-700">
               {steps.map((s, i) => (
@@ -59,13 +59,11 @@ export default function GuideModal() {
                   <div className="text-sm">{s}</div>
                 </div>
               ))}
-
               <div className="mt-4 text-xs text-slate-500">
                 Tip: If you don't see your wallet on mobile, try connecting via WalletConnect from the Connect modal.
               </div>
             </div>
 
-            {/* Footer actions inside modal so they remain visible */}
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
                 onClick={() => setOpen(false)}
