@@ -61,7 +61,7 @@ export default function App() {
   }
 
 return (
-  <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", paddingTop: "84px", placeContent: "center", margin: "33.33%", width: "800px" }}>
+  <div className="text-white min-h-screen">
     {/* Background layer */}
     <Background />
 
@@ -70,11 +70,13 @@ return (
 
     {/* Price ticker */}
     <div className="pt-[84px]">
-      <PriceTicker />
+      <div className="container mx-auto max-w-screen-lg px-4">
+        <PriceTicker />
+      </div>
 
       {/* Main content wrapper */}
-      <div className="w-full flex justify-center">
-        <main className="flex flex-col items-center gap-6 py-8 px-6 max-w-4xl">
+      <div className="container mx-auto max-w-screen-lg px-4">
+        <main className="flex flex-col items-center gap-6 py-8">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-center leading-tight">
             MVP Donation Dapp
           </h1>
@@ -119,16 +121,13 @@ return (
             </pre>
           </div>
         </main>
+
+        {/* Footer */}
+        <Footer />
       </div>
-      
- {/* Footer */}
-      <div className="w-full flex justify-center">
-        <div className="px-6 max-w-4xl w-full">
-          <Footer />
-        </div>
-      </div>
-      </div>
-    {/* Notifications - positioned absolutely */}
+    </div>
+
+    {/* Notifications */}
     <Notifications notifications={notifications} />
   </div>
 );
