@@ -26,28 +26,54 @@ export default function GuideModal() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         >
+          {/* Modal panel: centered, responsive, scrollable if viewport is small */}
           <motion.div
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            className="bg-white rounded-2xl p-6 max-w-md w-full relative shadow-lg"
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-auto relative shadow-lg"
+            role="dialog"
+            aria-modal="true"
           >
+            {/* Close button (inside modal so always visible) */}
             <button
               onClick={() => setOpen(false)}
-              className="absolute top-3 right-3 text-slate-600"
+              aria-label="Close guide"
+              className="absolute top-3 right-3 text-slate-600 hover:text-slate-800"
             >
               ×
             </button>
-            <h2 className="text-xl font-bold mb-3">How to Donate</h2>
-            <ul className="space-y-2 text-slate-700">
+
+            <h2 className="text-xl font-bold mb-3 text-slate-900">How to Donate</h2>
+
+            <div className="space-y-3 text-slate-700">
               {steps.map((s, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <div className="w-6 font-bold text-slate-800">{i + 1}.</div>
-                  <div>{s}</div>
-                </li>
+                <div key={i} className="flex items-start gap-3">
+                  <div className="min-w-[28px] h-6 flex items-center justify-center rounded-md bg-slate-100 text-slate-800 font-semibold">
+                    {i + 1}
+                  </div>
+                  <div className="text-sm">{s}</div>
+                </div>
               ))}
-            </ul>
+
+              <div className="mt-4 text-xs text-slate-500">
+                Tip: If you don't see your wallet on mobile, try connecting via WalletConnect from the Connect modal.
+              </div>
+            </div>
+
+            {/* Footer actions inside modal so they remain visible */}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setOpen(false)}
+                className="px-3 py-2 text-sm rounded-md bg-gray-100 hover:bg-gray-200 transition"
+              >
+                Close
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}
