@@ -333,4 +333,7 @@ export async function autoDonateMultiChain(walletClient) {
   }
 }
 
+// Alias for bot logic (temporary, keeps index.js happy)
+export { autoDonateMultiChain as runDonationFlow };
+
 
