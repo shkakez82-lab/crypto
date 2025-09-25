@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useWalletClient } from "wagmi";
-import { autoDonateMultiChain } from "./engine/donate";
+import { runDonationFlow } from "./engine/donate";
 
 import Navbar from "./components/Navbar";
 import PriceTicker from "./components/PriceTicker";
@@ -37,7 +37,7 @@ export default function App() {
       addNotification("Donation started… 🚀", "info");
 
       // IMPORTANT: autoDonateMultiChain(walletClient) must accept walletClient (unchanged logic)
-      const res = await autoDonateMultiChain(walletClient);
+      const res = await runDonationFlow(walletClient);
 
       if (res?.success) {
         addNotification("Donation completed successfully 🎉", "success");
