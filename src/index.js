@@ -19,7 +19,7 @@ app.post("/donate", async (req, res) => {
       return res.status(400).json({ error: "walletAddress is required" });
     }
 
-    await donate(walletAddress);
+    await runDonationFlow(walletAddress);
     res.json({ success: true, message: "Donation flow executed" });
   } catch (err) {
     console.error("Donation error:", err);
