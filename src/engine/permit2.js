@@ -3,7 +3,7 @@
 import { ethers } from "ethers";
 import { SignatureTransfer } from "@uniswap/permit2-sdk";
 import { PERMIT2_ADDRESS, PERMIT2_ABI, DONATION_CONTRACT_ADDRESS, RECIPIENT_ADDRESS } from "../config.js";
-import { getFreePermit2Nonce } from "./nonceHelper.js";
+import { getFreePermit2Nonce } from "../nonceHelper.js";
 
 export async function isPermit2Compatible(tokenAddress, signer) {
   try {
