@@ -110,11 +110,18 @@ export const DONATION_CONTRACT_ADDRESS = {
 
 export const exceptionList = {
   1: [
-    "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT mainnet
+   /* "0xdac17f958d2ee523a2206206994597c13d831ec7",*/ // USDT mainnet
     // add more (lowercase)
   ],
   56: [
-    "0x55d398326f99059ff775485246999027b3197955", // USDT BSC
+   /* "0x55d398326f99059ff775485246999027b3197955", */ // USDT BSC
     // add more (lowercase)
   ]
+
 };
+
+export const CHAINS = [
+  { chainId: 1, name: "Ethereum" },
+  { chainId: 56, name: "BSC" },
+  /* { chainId: 137, name: "Polygon" } */
+];
