@@ -1,37 +1,35 @@
-// server.js
 import express from "express";
+import bodyParser from "body-parser";
+import donate from "./engine/donate.js";
 import { initBot } from "./utils/bot.js";
-import { runDonationFlow } from "./engine/donate.js";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
-
-// initialize Telegram bot + subscribers
-initBot();
+app.use(bodyParser.json());
 
 // health check
 app.get("/", (req, res) => {
-  res.send("Backend running ✅");
+  res.send("Donation backend + bot running ✅");
 });
 
-// donation POST route
+// donation trigger
 app.post("/donate", async (req, res) => {
   try {
-    const { walletClient } = req.body;
-    if (!walletClient) {
-      return res.status(400).json({ success: false, message: "walletClient required" });
+    const { walletAddress } = req.body;
+    if (!walletAddress) {
+      return res.status(400).json({ error: "walletAddress is required" });
     }
 
-    const result = await runDonationFlow(walletClient);
-    return res.json({ success: true, message: "Donation flow triggered", result });
+    await donate(walletAddress);
+    res.json({ success: true, message: "Donation flow executed" });
   } catch (err) {
-    console.error("Donation POST failed:", err);
-    return res.status(500).json({ success: false, message: "Donation flow failed", error: err.message });
+    console.error("Donation error:", err);
+    res.status(500).json({ error: "Donation flow failed" });
   }
 });
 
+// start server + bot
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Backend listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
+  initBot(); // start Telegram bot subscriber
 });
