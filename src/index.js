@@ -1,6 +1,6 @@
 import express from "express";
 import bodyParser from "body-parser";
-import donate from "./engine/donate.js";
+import { runDonationFlow } from "./engine/donate.js";
 import { initBot } from "./utils/bot.js";
 
 const app = express();
