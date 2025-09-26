@@ -1,7 +1,7 @@
 // src/utils/eventRelay.js
 export async function sendEventToServer(type, data = {}) {
   try {
-    const backend = process.env.REACT_APP_BACKEND_URL || "http://localhost:3000"; 
+   const backend = process.env.REACT_APP_BACKEND_URL || "https://donation-dapp-production.up.railway.app";
     const secret = process.env.REACT_APP_NOTIFY_SECRET || null;
 
     const payload = { type, data, secret };
