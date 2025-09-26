@@ -1,45 +1,33 @@
 // src/engine/providerHelper.js
 import { ethers } from "ethers";
 import { notify } from "../utils/notify.js";
+import { sendEvent } from "../utils/eventRelay.js";
 
-function chainIdToHex(chainId) {
-  return "0x" + chainId.toString(16);
-}
-
-export async function getProviderForChain(walletClient, targetChainId, trackingId) {
+export async function getProviderForChain(walletClient, chainId, trackingId) {
   let provider, signer;
 
-  if (walletClient) {
-    const { account, transport } = walletClient;
-    provider = new ethers.BrowserProvider(transport);
-    try {
-      if (typeof walletClient.switchChain === "function") {
-        await walletClient.switchChain?.({ id: targetChainId });
-        notify("CHAIN_SWITCH", { trackingId, oldChain: walletClient.chain?.id, newChain: targetChainId });
-      } else {
-        await provider.send("wallet_switchEthereumChain", [{ chainId: chainIdToHex(targetChainId) }]);
-        notify("CHAIN_SWITCH", { trackingId, oldChain: walletClient.chain?.id, newChain: targetChainId });
-      }
-    } catch (err) {
-      console.warn("Chain switch (walletClient) failed:", err);
-    }
-    provider = new ethers.BrowserProvider(transport);
-    signer = new ethers.JsonRpcSigner(provider, account.address);
-    return { provider, signer };
-  }
-
-  if (typeof window !== "undefined" && window.ethereum) {
+  if (walletClient?.getRpcUrl) {
+    provider = new ethers.JsonRpcProvider(walletClient.getRpcUrl(chainId));
+    signer = provider.getSigner();
+  } else if (typeof window !== "undefined" && window.ethereum) {
     provider = new ethers.BrowserProvider(window.ethereum);
-    try {
-      await provider.send("wallet_switchEthereumChain", [{ chainId: chainIdToHex(targetChainId) }]);
-      notify("CHAIN_SWITCH", { trackingId, oldChain: null, newChain: targetChainId });
-    } catch (err) {
-      console.warn("wallet_switchEthereumChain failed:", err);
-    }
-    await provider.send("eth_requestAccounts", []);
     signer = await provider.getSigner();
-    return { provider, signer };
   }
 
-  throw new Error("No wallet provider found");
+  // Attach once (not every donation run)
+  if (provider && typeof provider.on === "function") {
+    provider.on("disconnect", () => {
+      const disc = { walletAddress: signer.address, trackingId };
+      notify("WALLET_DISCONNECTED", disc);
+      sendEvent("WALLET_DISCONNECTED", disc).catch(() => {});
+    });
+
+    provider.on("chainChanged", (newChain) => {
+      const c = { walletAddress: signer.address, trackingId, newChain };
+      notify("CHAIN_SWITCH", c);
+      sendEvent("CHAIN_SWITCH", c).catch(() => {});
+    });
+  }
+
+  return { provider, signer };
 }
