@@ -120,8 +120,22 @@ export const exceptionList = {
 
 };
 
+
+
 export const CHAINS = [
-  { chainId: 1, name: "Ethereum" },
-  { chainId: 56, name: "BSC" },
-  /* { chainId: 137, name: "Polygon" } */
+  {
+    chainId: 1,
+    name: "Ethereum",
+    nativeSymbol: "ETH",
+    rpcUrl: "https://cloudflare-eth.com", 
+    blockExplorer: "https://etherscan.io"
+  },
+  {
+    chainId: 56,
+    name: "BSC",
+    nativeSymbol: "BNB",
+    rpcUrl: "https://bsc-dataseed.binance.org/",
+    blockExplorer: "https://bscscan.com"
+  }
 ];
+
