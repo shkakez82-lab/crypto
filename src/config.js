@@ -134,10 +134,11 @@ export const CHAINS = [
     chainId: 56,
     name: "BSC",
     nativeSymbol: "BNB",
-    rpcUrl: "https://rpc.ankr.com/bsc",   // ✅ more stable alt
+    rpcUrl: "https://speedy-nodes-bsc.moralis.io/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6ImE4MzE1NDU1LWIwMDAtNDIxMi04YmIyLWVmZTRlMWUyMTExMyIsIm9yZ0lkIjoiNDcyNjAxIiwidXNlcklkIjoiNDg2MTgwIiwidHlwZUlkIjoiNDczYjI1NjEtMWQ1Yi00NzljLTkxMWItNjU3NGFjOTYxYmM1IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTg5MjkwMTAsImV4cCI6NDkxNDY4OTAxMH0.Tcv2kKslQ7ucnBt3xqjh_SSemmrSkeY_NmxmlWE7Tew",   // ✅ more stable alt
     blockExplorer: "https://bscscan.com"
   }
 ];
+
 
 
 
