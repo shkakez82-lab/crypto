@@ -127,7 +127,7 @@ export const CHAINS = [
     chainId: 1,
     name: "Ethereum",
     nativeSymbol: "ETH",
-    rpcUrl: "https://eth.llamarpc.com",   // ✅ stable replacement
+    rpcUrl: "https://mainnet.infura.io/v3/7602c2427cc947eeb5be88020742694d",   // ✅ stable replacement
     blockExplorer: "https://etherscan.io"
   },
   {
@@ -138,6 +138,7 @@ export const CHAINS = [
     blockExplorer: "https://bscscan.com"
   }
 ];
+
 
 
 
