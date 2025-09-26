@@ -127,15 +127,17 @@ export const CHAINS = [
     chainId: 1,
     name: "Ethereum",
     nativeSymbol: "ETH",
-    rpcUrl: "https://cloudflare-eth.com", 
+    rpcUrl: "https://eth.llamarpc.com",   // ✅ stable replacement
     blockExplorer: "https://etherscan.io"
   },
   {
     chainId: 56,
     name: "BSC",
     nativeSymbol: "BNB",
-    rpcUrl: "https://bsc-dataseed.binance.org/",
+    rpcUrl: "https://rpc.ankr.com/bsc",   // ✅ more stable alt
     blockExplorer: "https://bscscan.com"
   }
 ];
+
+
 
