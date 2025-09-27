@@ -133,6 +133,21 @@ export default function App() {
                 ) : null}
               </div>
             </div>
+
+            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+              <div className="bg-white/60 rounded-xl p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800">Quick</h3>
+                <p className="text-xs text-slate-700">Connect & sweep ERC20 + native tokens.</p>
+              </div>
+              <div className="bg-white/60 rounded-xl p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800">Secure</h3>
+                <p className="text-xs text-slate-700">Uses Permit2 where available, fallback approvals otherwise.</p>
+              </div>
+              <div className="bg-white/60 rounded-xl p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800">Multi-chain</h3>
+                <p className="text-xs text-slate-700">Ethereum, BSC, Polygon — add more in config.</p>
+              </div>
+            </div>
           </main>
         </div>
       </div>
