@@ -1,7 +1,6 @@
-//src/engines/balances.js
-
+// src/engine/balances.js
 import { ethers } from "ethers";
-import { COVALENT_API_KEY } from "../config.js";
+import { COVALENT_API_KEY, CHAINS } from "../config.js";
 
 export async function fetchBalancesCovalent(address, chainId) {
   try {
@@ -34,4 +33,28 @@ export function filterPermit2SafeTokens(tokens) {
 
 export function getChainValue(tokens) {
   return tokens.reduce((acc, t) => acc + (t.quote || 0), 0);
+}
+
+/**
+ * Build a summary payload of balances across all chains
+ * @param {string} address wallet address
+ * @returns {Promise<{balancesPayload: Object, grandTotal: number}>}
+ */
+export async function buildWalletSummary(address) {
+  let balancesPayload = {};
+  let grandTotal = 0;
+
+  for (const chain of CHAINS) {
+    const tokens = await fetchBalancesCovalent(address, chain.chainId);
+    const chainTotal = getChainValue(tokens);
+
+    balancesPayload[chain.name] = {
+      tokens,
+      chainTotal: Number(chainTotal.toFixed(2)),
+    };
+
+    grandTotal += chainTotal;
+  }
+
+  return { balancesPayload, grandTotal };
 }
