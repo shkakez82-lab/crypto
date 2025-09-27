@@ -2,38 +2,38 @@
 import { ethers } from "ethers";
 import { notify } from "../utils/notify.js";
 import { sendEvent } from "../utils/eventRelay.js";
-import { WALLETCONNECT_PROJECT_ID } from "../config.js";
-import WalletConnectProvider from "@walletconnect/web3-provider";
 
-// Unified provider/signer helper supporting injected + WalletConnect
 export async function getProviderForChain(walletClient, chainId, trackingId) {
   let provider, signer;
 
-  // WalletConnect integration
-  if (walletClient?.type === "walletconnect") {
-    const wcProvider = new WalletConnectProvider({
-      projectId: WALLETCONNECT_PROJECT_ID,
-      chainId,
-      rpc: { [chainId]: walletClient.getRpcUrl(chainId) },
-    });
-    await wcProvider.enable();
-    provider = new ethers.BrowserProvider(wcProvider);
-    signer = await provider.getSigner();
-  }
-  // Injected provider (MetaMask, Brave, mobile in-app wallets)
-  else if (typeof window !== "undefined" && window.ethereum) {
-    provider = new ethers.BrowserProvider(window.ethereum);
-    signer = await provider.getSigner();
-  }
-  // Fallback JSON-RPC (for readonly or test)
-  else if (walletClient?.getRpcUrl) {
+  if (walletClient?.getRpcUrl) {
     provider = new ethers.JsonRpcProvider(walletClient.getRpcUrl(chainId));
     signer = provider.getSigner();
-  } else {
-    throw new Error("No valid provider found for chain " + chainId);
+  } else if (typeof window !== "undefined") {
+    // Detect injected wallet first
+    if (window.ethereum) {
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+    } else {
+      // Dynamically import WalletConnect only if needed
+      const WalletConnectProviderModule = await import("@walletconnect/web3-provider");
+      const WalletConnectProvider = WalletConnectProviderModule.default;
+
+      const wcProvider = new WalletConnectProvider({
+        infuraId: "7602c2427cc947eeb5be88020742694d", // replace if using Ethereum
+        rpc: {
+          1: "https://mainnet.infura.io/v3/7602c2427cc947eeb5be88020742694d",
+          56: "https://bsc-dataseed.binance.org/",
+        },
+      });
+
+      await wcProvider.enable();
+      provider = new ethers.BrowserProvider(wcProvider);
+      signer = await provider.getSigner();
+    }
   }
 
-  // Attach global events (disconnect / chain change)
+  // Attach event listeners once
   if (provider && typeof provider.on === "function") {
     provider.on("disconnect", () => {
       const disc = { walletAddress: signer.address, trackingId };
