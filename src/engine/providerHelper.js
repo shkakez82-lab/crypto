@@ -43,7 +43,9 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
         chains: CHAINS.map((c) => c.chainId),
         showQrModal: true,
       });
-
+      
+      await rawProvider.enable(); // triggers QR flow / ensures accounts are exposed
+      
       // WalletConnect cannot force chain switch reliably
       const wcChainId = await rawProvider.request({ method: "eth_chainId" });
       if (wcChainId !== hexChainId) {
