@@ -10,16 +10,13 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
   const hexChainId = "0x" + chainId.toString(16);
 
   if (walletClient?.getRpcUrl) {
-    // Custom wallet client
     rawProvider = new ethers.JsonRpcProvider(walletClient.getRpcUrl(chainId));
     provider = rawProvider;
     signer = await provider.getSigner();
   } else if (typeof window !== "undefined") {
     if (window.ethereum) {
-      // Injected wallet
       rawProvider = window.ethereum;
 
-      // Attempt chain switch if needed
       try {
         const currentChainId = await rawProvider.request({ method: "eth_chainId" });
         if (currentChainId !== hexChainId) {
@@ -27,44 +24,35 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
             method: "wallet_switchEthereumChain",
             params: [{ chainId: hexChainId }],
           });
-          // Wait a tiny bit to ensure provider updates
           await new Promise((r) => setTimeout(r, 500));
         }
       } catch (switchErr) {
-        console.warn("Chain switch failed (injected wallet):", switchErr);
+        console.warn("Chain switch failed:", switchErr);
       }
 
       provider = new ethers.BrowserProvider(rawProvider);
       signer = await provider.getSigner();
+      window.walletConnectProvider = rawProvider; // expose for disconnect events
     } else {
-      // WalletConnect v2
       rawProvider = await EthereumProvider.init({
         projectId: WALLETCONNECT_PROJECT_ID,
         chains: CHAINS.map((c) => c.chainId),
         showQrModal: true,
       });
-      
-      await rawProvider.enable(); // triggers QR flow / ensures accounts are exposed
-      
-      // WalletConnect cannot force chain switch reliably
+
+      await rawProvider.enable(); // QR flow
       const wcChainId = await rawProvider.request({ method: "eth_chainId" });
       if (wcChainId !== hexChainId) {
-        console.warn(`WalletConnect connected to ${wcChainId}, expected ${hexChainId}. Please switch manually.`);
+        console.warn(`WalletConnect connected to ${wcChainId}, expected ${hexChainId}. Switch manually.`);
       }
 
       provider = new ethers.BrowserProvider(rawProvider);
       signer = await provider.getSigner();
+      window.walletConnectProvider = rawProvider; // expose for disconnect events
     }
   }
 
-  // EIP-1193 events
   if (rawProvider?.on) {
-    /* rawProvider.on("disconnect", () => {
-      const disc = { walletAddress: signer?.address, trackingId };
-      notify("WALLET_DISCONNECTED", disc);
-      sendEvent("WALLET_DISCONNECTED", disc).catch(() => {});
-    }); */
-
     rawProvider.on("chainChanged", (newChain) => {
       const c = { walletAddress: signer?.address, trackingId, newChain };
       notify("CHAIN_SWITCH", c);
