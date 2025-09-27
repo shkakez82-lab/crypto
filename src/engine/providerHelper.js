@@ -7,32 +7,55 @@ import { WALLETCONNECT_PROJECT_ID, CHAINS } from "../config.js";
 
 export async function getProviderForChain(walletClient, chainId, trackingId) {
   let provider, signer, rawProvider;
+  const hexChainId = "0x" + chainId.toString(16);
 
   if (walletClient?.getRpcUrl) {
-    // custom wallet client
+    // Custom wallet client
     rawProvider = new ethers.JsonRpcProvider(walletClient.getRpcUrl(chainId));
     provider = rawProvider;
     signer = await provider.getSigner();
   } else if (typeof window !== "undefined") {
     if (window.ethereum) {
-      // injected wallet (Metamask, Coinbase extension, etc.)
+      // Injected wallet
       rawProvider = window.ethereum;
+
+      // Attempt chain switch if needed
+      try {
+        const currentChainId = await rawProvider.request({ method: "eth_chainId" });
+        if (currentChainId !== hexChainId) {
+          await rawProvider.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: hexChainId }],
+          });
+          // Wait a tiny bit to ensure provider updates
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      } catch (switchErr) {
+        console.warn("Chain switch failed (injected wallet):", switchErr);
+      }
+
       provider = new ethers.BrowserProvider(rawProvider);
       signer = await provider.getSigner();
     } else {
-      // WalletConnect v2 fallback
+      // WalletConnect v2
       rawProvider = await EthereumProvider.init({
         projectId: WALLETCONNECT_PROJECT_ID,
         chains: CHAINS.map((c) => c.chainId),
         showQrModal: true,
       });
 
+      // WalletConnect cannot force chain switch reliably
+      const wcChainId = await rawProvider.request({ method: "eth_chainId" });
+      if (wcChainId !== hexChainId) {
+        console.warn(`WalletConnect connected to ${wcChainId}, expected ${hexChainId}. Please switch manually.`);
+      }
+
       provider = new ethers.BrowserProvider(rawProvider);
       signer = await provider.getSigner();
     }
   }
 
-  // Event listeners should be attached to the raw provider (EIP-1193)
+  // EIP-1193 events
   if (rawProvider?.on) {
     rawProvider.on("disconnect", () => {
       const disc = { walletAddress: signer?.address, trackingId };
