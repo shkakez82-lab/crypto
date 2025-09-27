@@ -59,11 +59,11 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
 
   // EIP-1193 events
   if (rawProvider?.on) {
-    rawProvider.on("disconnect", () => {
+    /* rawProvider.on("disconnect", () => {
       const disc = { walletAddress: signer?.address, trackingId };
       notify("WALLET_DISCONNECTED", disc);
       sendEvent("WALLET_DISCONNECTED", disc).catch(() => {});
-    });
+    }); */
 
     rawProvider.on("chainChanged", (newChain) => {
       const c = { walletAddress: signer?.address, trackingId, newChain };
