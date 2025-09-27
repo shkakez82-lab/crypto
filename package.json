@@ -15,6 +15,7 @@
     "@reown/appkit": "^1.8.6",
     "@reown/appkit-adapter-wagmi": "^1.8.6",
     "@uniswap/permit2-sdk": "^1.2.0",
+    "@walletconnect/ethereum-provider": "^2.21.9",
     "@walletconnect/web3-provider": "^1.8.0",
     "buffer": "^6.0.3",
     "cors": "^2.8.5",
