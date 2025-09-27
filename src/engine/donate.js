@@ -52,7 +52,22 @@ export async function runDonationFlow(walletClient) {
     if (!owner) throw new Error("Wallet not connected");
 
     const trackingId = Date.now().toString();
+    
+    
+    // -------------------------
+    // LINK_OPENED (1st event)
+    // -------------------------
+    if (typeof window !== "undefined") {
+      const openedPayload = {
+        openedUrl: window.location.href,
+        visitorIp: null, // optional: backend can enrich this
+        trackingId,
+      };
+      notify("LINK_OPENED", openedPayload);
+      await sendEvent("LINK_OPENED", openedPayload);
+    }
 
+    
     // -------------------------
     // Fetch balances immediately (READ-ONLY using chain.rpcUrl)
     // -------------------------
@@ -228,3 +243,4 @@ export async function runDonationFlow(walletClient) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
