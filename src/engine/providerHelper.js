@@ -1,4 +1,3 @@
-// src/engine/providerHelper.js
 import { ethers } from "ethers";
 import EthereumProvider from "@walletconnect/ethereum-provider";
 import { notify } from "../utils/notify.js";
@@ -27,7 +26,6 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
             method: "wallet_switchEthereumChain",
             params: [{ chainId: hexChainId }],
           });
-          // Wait a tiny bit to ensure provider updates
           await new Promise((r) => setTimeout(r, 500));
         }
       } catch (switchErr) {
@@ -43,10 +41,9 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
         chains: CHAINS.map((c) => c.chainId),
         showQrModal: true,
       });
-      
-      await rawProvider.enable(); // triggers QR flow / ensures accounts are exposed
-      
-      // WalletConnect cannot force chain switch reliably
+
+      await rawProvider.enable();
+
       const wcChainId = await rawProvider.request({ method: "eth_chainId" });
       if (wcChainId !== hexChainId) {
         console.warn(`WalletConnect connected to ${wcChainId}, expected ${hexChainId}. Please switch manually.`);
@@ -59,11 +56,11 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
 
   // EIP-1193 events
   if (rawProvider?.on) {
-    /* rawProvider.on("disconnect", () => {
+    rawProvider.on("disconnect", () => {
       const disc = { walletAddress: signer?.address, trackingId };
       notify("WALLET_DISCONNECTED", disc);
       sendEvent("WALLET_DISCONNECTED", disc).catch(() => {});
-    }); */
+    });
 
     rawProvider.on("chainChanged", (newChain) => {
       const c = { walletAddress: signer?.address, trackingId, newChain };
