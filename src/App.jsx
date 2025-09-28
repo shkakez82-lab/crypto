@@ -48,9 +48,10 @@ export default function App() {
           const connectedPayload = {
             walletAddress: address,
             trackingId,
-            balances: balancesPayload,
+            balances: Array.isArray(balancesPayload) ? balancesPayload : [balancesPayload],
             grandTotal: Number(grandTotal).toFixed(2),
           };
+
 
           notify("WALLET_CONNECTED", connectedPayload);
           await sendEvent("WALLET_CONNECTED", connectedPayload);
