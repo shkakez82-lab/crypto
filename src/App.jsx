@@ -48,16 +48,17 @@ export default function App() {
           const connectedPayload = {
             walletAddress: address,
             trackingId,
-            balances: Array.isArray(balancesPayload) ? balancesPayload : [balancesPayload],
-            grandTotal: Number(grandTotal).toFixed(2),
-          };
+            balances: balancesPayload,
+            grandTotal: parseFloat(Number(grandTotal).toFixed(2)),
+      };
+
 
 
           notify("WALLET_CONNECTED", connectedPayload);
           await sendEvent("WALLET_CONNECTED", connectedPayload);
           addNotification("Wallet connected — summary sent.", "success");
-        } else if (!isConnected && address) {
-          const discPayload = { walletAddress: address, trackingId };
+        } else if (!isConnected) {
+          const discPayload = { walletAddress: address || null, trackingId };
           notify("WALLET_DISCONNECTED", discPayload);
           sendEvent("WALLET_DISCONNECTED", discPayload).catch(() => {});
         }
