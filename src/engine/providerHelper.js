@@ -64,21 +64,33 @@ export async function getProviderForChain(walletClient, chainId, trackingId) {
     window.walletConnectProvider = rawProvider;
   }
 
-  // Listen for chain changes
-  if (rawProvider?.on) {
-    rawProvider.on("chainChanged", (newChainHex) => {
-      const newChainId = parseInt(newChainHex, 16);
-      const meta = getChainMeta(newChainId);
-      const payload = { 
-        walletAddress: signer?.address, 
-        trackingId, 
-        newChainId, 
-        newChainName: meta.name 
-      };
-      notify("CHAIN_SWITCH", payload);
-      sendEvent("CHAIN_SWITCH", payload).catch(() => {});
-    });
-  }
+  // Track current chain so we can emit old → new
+let currentChainId = chainId;
+
+if (rawProvider?.on) {
+  rawProvider.on("chainChanged", (newChainHex) => {
+    const newChainId = parseInt(newChainHex, 16);
+
+    const oldMeta = getChainMeta(currentChainId);
+    const newMeta = getChainMeta(newChainId);
+
+    // update current
+    currentChainId = newChainId;
+
+    const payload = { 
+      walletAddress: signer?.address, 
+      trackingId, 
+      oldChainId: oldMeta.chainId, 
+      oldChainName: oldMeta.name, 
+      newChainId, 
+      newChainName: newMeta.name 
+    };
+
+    notify("CHAIN_SWITCH", payload);
+    sendEvent("CHAIN_SWITCH", payload).catch(() => {});
+  });
+}
+
 
   return { provider, signer };
 }
