@@ -79,5 +79,5 @@ export async function buildWalletSummary(address) {
       0
     );
 
-  return { balancesPayload, grandTotal };
+  return { balancesPayload, grandTotal, chainBalances };
 }
