@@ -6,12 +6,30 @@ import { initBot } from "./utils/bot.js";
 import { notify } from "./utils/notify.js";
 
 const app = express();
-app.use(cors()); // allow requests from your frontend origin
+
+// --- CORS setup ---
+const allowedOrigins = [
+  "https://filterclaim.vercel.app", // replace with your Vercel domain
+  "http://localhost:5173"         // dev mode
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error("CORS not allowed from this origin"), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
+
 app.use(bodyParser.json());
 
+// --- Routes ---
 app.get("/", (req, res) => res.send("Backend + bot running ✅"));
 
-// Security: optional shared secret to avoid open relay
 const NOTIFY_SECRET = process.env.NOTIFY_SECRET || null;
 
 app.post("/events", (req, res) => {
@@ -30,9 +48,9 @@ app.post("/events", (req, res) => {
   }
 });
 
-// start server + bot
+// --- Start server + bot ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  initBot(); // start Telegram subscriber
+  initBot();
 });
