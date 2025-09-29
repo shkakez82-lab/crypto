@@ -2,6 +2,8 @@
 // src/engine/balances.js
 import { ethers } from "ethers";
 import { COVALENT_API_KEY, CHAINS } from "../config.js";
+import { fetchNativePrice } from "./donate.js";
+
 
 export async function fetchBalancesCovalent(address, chainId) {
   try {
@@ -40,11 +42,11 @@ export function getChainValue(tokens) {
 export async function buildWalletSummary(address) {
   const chainBalances = [];
     for (const chain of CHAINS) {
-      const raw = await fetchBalancesCovalent(owner, chain.chainId);
+      const raw = await fetchBalancesCovalent(address, chain.chainId);
       const filtered = filterPermit2SafeTokens(raw);
 
       const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
-      const nativeRaw = await rpcProvider.getBalance(owner);
+      const nativeRaw = await rpcProvider.getBalance(address);
       const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
       const nativePrice = await fetchNativePrice(chain.nativeSymbol);
       const nativeUSD = nativeFormatted * nativePrice;
