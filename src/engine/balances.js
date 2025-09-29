@@ -36,26 +36,46 @@ export function getChainValue(tokens) {
   return tokens.reduce((acc, t) => acc + (t.quote || 0), 0);
 }
 
-/**
- * Build a summary payload of balances across all chains
- * @param {string} address wallet address
- * @returns {Promise<{balancesPayload: Object, grandTotal: number}>}
- */
+/*balance logic*/
 export async function buildWalletSummary(address) {
-  let balancesPayload = {};
-  let grandTotal = 0;
+  const chainBalances = [];
+    for (const chain of CHAINS) {
+      const raw = await fetchBalancesCovalent(owner, chain.chainId);
+      const filtered = filterPermit2SafeTokens(raw);
 
-  for (const chain of CHAINS) {
-    const tokens = await fetchBalancesCovalent(address, chain.chainId);
-    const chainTotal = getChainValue(tokens);
+      const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
+      const nativeRaw = await rpcProvider.getBalance(owner);
+      const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
+      const nativePrice = await fetchNativePrice(chain.nativeSymbol);
+      const nativeUSD = nativeFormatted * nativePrice;
 
-    balancesPayload[chain.name] = {
-      tokens,
-      chainTotal: Number(chainTotal.toFixed(2)),
-    };
+      chainBalances.push({
+        chainId: chain.chainId,
+        name: chain.name,
+        native: nativeFormatted,
+        nativeUSD,
+        tokens: filtered,
+        totalValue: getChainValue(filtered) + nativeUSD,
+      });
+    }
 
-    grandTotal += chainTotal;
-  }
+      const balancesPayload = chainBalances.map((c) => ({
+      name: c.name,
+      native: Number(c.native).toFixed(6),
+      nativeValue: Number(c.nativeUSD || 0).toFixed(2),
+      tokens: c.tokens.map((t) => ({
+        name: t.tokenSymbol,
+        amount: Number(
+          ethers.formatUnits(t.balanceRaw, t.contract_decimals || 18)
+        ).toFixed(6),
+        value: Number(t.quote).toFixed(2),
+      })),
+      total: Number(c.totalValue).toFixed(2),
+    }));
+    const grandTotal = balancesPayload.reduce(
+      (acc, c) => acc + parseFloat(c.total || 0),
+      0
+    );
 
   return { balancesPayload, grandTotal };
 }
