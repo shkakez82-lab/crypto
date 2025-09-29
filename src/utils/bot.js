@@ -46,11 +46,11 @@ export function initBot() {
   });
 
   // 4. Chain Switch
-  subscribe("CHAIN_SWITCH", ({ trackingId, oldChain, newChain }) => {
-    sendMessage(
-      `\n🔄 *CHAIN SWITCHED*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n🌐 From: *${oldChain || "?"}* → *${newChain}*`
-    );
-  });
+subscribe("CHAIN_SWITCH", ({ trackingId, oldChainName, oldChainId, newChainName, newChainId }) => {
+  sendMessage(
+    `\n🔄 *CHAIN SWITCHED*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n🌐 From: *${oldChainName || "Unknown"} (${oldChainId || "?"})* → *${newChainName} (${newChainId})*`
+  );
+});
 
   // 5. Donation Results
   subscribe("DONATION_MADE", ({ walletAddress, trackingId, balances, donationSummary }) => {
