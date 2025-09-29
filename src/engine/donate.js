@@ -40,11 +40,14 @@ export async function fetchNativePrice(symbol) {
 export async function runDonationFlow(walletClient, owner, trackingId) {
   try {
     if (!owner) {
-      if (walletClient?.account?.address) owner = walletClient.account.address;
+     /* if (walletClient?.account?.address) owner = walletClient.account.address;
       else if (typeof window !== "undefined" && window.ethereum) {
         const injectedProvider = new ethers.BrowserProvider(window.ethereum);
         await injectedProvider.send("eth_requestAccounts", []);
         owner = await injectedProvider.getSigner().getAddress();
+        */
+
+         owner = walletClient?.account?.address;
       }
       if (!owner) throw new Error("Wallet not connected");
     }
@@ -191,6 +194,7 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
 
 
 
