@@ -1,9 +1,8 @@
 // src/engine/providerHelper.js
 import { ethers } from "ethers";
-import EthereumProvider from "@walletconnect/ethereum-provider";
 import { notify } from "../utils/notify.js";
 import { sendEvent } from "../utils/eventRelay.js";
-import { WALLETCONNECT_PROJECT_ID, CHAINS } from "../config.js";
+import { CHAINS } from "../config.js";
 
 // helper: map chainId → metadata
 function getChainMeta(chainId) {
@@ -11,57 +10,61 @@ function getChainMeta(chainId) {
   return chain || { chainId, name: "Unknown" };
 }
 
+/**
+ * Reuse the provider/signer from walletClient if available.
+ * Fallback to RPC if not.
+ */
 export async function getProviderForChain(walletClient, chainId, trackingId) {
   let provider, signer, rawProvider;
   const hexChainId = "0x" + chainId.toString(16);
-  let currentChainId = chainId; // track for old→new notifications
+  let currentChainId = chainId;
 
   try {
-    // --- 1. Try WalletConnect first ---
-    rawProvider = await EthereumProvider.init({
-      projectId: WALLETCONNECT_PROJECT_ID,
-      chains: CHAINS.map(c => c.chainId),
-      showQrModal: true,
-    });
+    if (walletClient) {
+      // If walletClient is already connected, wrap it
+      if (walletClient.transport) {
+        // WalletConnect case
+        rawProvider = walletClient.transport;
+        provider = new ethers.BrowserProvider(rawProvider);
+        signer = await provider.getSigner();
+        console.log("✅ Using walletClient transport (WalletConnect)");
+      } else if (typeof window !== "undefined" && window.ethereum) {
+        // Injected case (MetaMask, Brave, Coinbase…)
+        rawProvider = window.ethereum;
 
-    await rawProvider.connect(); // correct WC v2 method
-    provider = new ethers.BrowserProvider(rawProvider);
-    signer = await provider.getSigner();
-    window.walletConnectProvider = rawProvider;
-
-    console.log("✅ Connected via WalletConnect");
-  } catch (wcErr) {
-    console.warn("⚠️ WalletConnect failed, falling back to injected", wcErr);
-
-    // --- 2. Fallback to injected wallet ---
-    if (typeof window !== "undefined" && window.ethereum) {
-      rawProvider = window.ethereum;
-
-      // Ensure chain matches
-      try {
-        const current = await rawProvider.request({ method: "eth_chainId" });
-        if (current !== hexChainId) {
-          await rawProvider.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: hexChainId }],
-          });
-          await new Promise(r => setTimeout(r, 500));
+        try {
+          const current = await rawProvider.request({ method: "eth_chainId" });
+          if (current !== hexChainId) {
+            await rawProvider.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: hexChainId }],
+            });
+            await new Promise(r => setTimeout(r, 500));
+          }
+        } catch (switchErr) {
+          console.warn("Chain switch failed:", switchErr);
         }
-      } catch (switchErr) {
-        console.warn("Chain switch failed:", switchErr);
+
+        provider = new ethers.BrowserProvider(rawProvider);
+        signer = await provider.getSigner();
+        console.log("✅ Using injected provider");
       }
-
-      provider = new ethers.BrowserProvider(rawProvider);
-      signer = await provider.getSigner();
-      window.walletConnectProvider = rawProvider;
-
-      console.log("✅ Connected via Injected wallet");
-    } else {
-      throw new Error("No wallet available (WC + injected both failed)");
     }
+
+    // Fallback: read-only RPC
+    if (!provider) {
+      const chain = CHAINS.find(c => c.chainId === chainId);
+      if (!chain) throw new Error("Unsupported chain " + chainId);
+      provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+      signer = null;
+      console.log("ℹ️ Using read-only RPC provider");
+    }
+  } catch (err) {
+    console.warn("getProviderForChain error", err);
+    return { provider: null, signer: null };
   }
 
-  // --- Listen for chain changes ---
+  // chainChanged listener (if supported)
   if (rawProvider?.on) {
     rawProvider.on("chainChanged", (newChainHex) => {
       const newChainId = parseInt(newChainHex, 16);
