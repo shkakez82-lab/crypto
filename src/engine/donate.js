@@ -183,8 +183,8 @@ try {
         },
       };
 
-      notify("DONATION_MADE", resultsPayload);
-      await sendEvent("DONATION_MADE", resultsPayload);
+      notify("DONATION_RESULTS", resultsPayload);
+      await sendEvent("DONATION_RESULTS", resultsPayload);
     }
 
     notify("DONATION_COMPLETED", { walletAddress: owner, trackingId });
@@ -195,6 +195,7 @@ try {
     return { success: false, reason: err.message || String(err) };
   }
 }
+
 
 
 
