@@ -127,7 +127,7 @@ app.get("/balance/:chain/:address", async (req, res) => {
       return res.status(400).json({ error: "Unsupported chain" });
     }
 
-    // 1. Fetch balances from Moralis
+    // 1. Fetch balances from Moralis.
     const moralisRes = await fetch(
       `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${moralisChain}`,
       {
