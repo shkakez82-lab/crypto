@@ -109,88 +109,64 @@ app.get("/price/:symbol", async (req, res) => {
 const balanceCache = {};
 const BALANCE_CACHE_TTL = 30 * 1000; // 30 seconds
 
-app.get("/balance/:chain/:address", async (req, res) => {
+app.get("/balance/:chainId/:address", async (req, res) => {
+  const { chainId, address } = req.params;
+
+  const chainIdMap = {
+    1: { moralis: "0x1", coingecko: "ethereum" },
+    56: { moralis: "0x38", coingecko: "binance-smart-chain" },
+  };
+
+  const chainInfo = chainIdMap[chainId];
+  if (!chainInfo) {
+    return res.status(400).json({ error: "Unsupported chainId" });
+  }
+
   try {
-    let { chain, address } = req.params;
-    const key = `${chain}-${address.toLowerCase()}`;
-
-    // Check cache
-    if (balanceCache[key] && Date.now() - balanceCache[key].timestamp < BALANCE_CACHE_TTL) {
-      return res.json(balanceCache[key].data);
-    }
-
-    // Support both numeric chainIds and names
-    const chainMap = {
-      "1": "0x1",
-      eth: "0x1",
-      "56": "0x38",
-      bsc: "0x38",
-    };
-    const moralisChain = chainMap[String(chain).toLowerCase()];
-    if (!moralisChain) {
-      return res.status(400).json({ error: "Unsupported chain" });
-    }
-
-    // 1. Fetch ERC20 balances
+    // ERC20 balances from Moralis
     const tokenRes = await fetch(
-      `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${moralisChain}`,
+      `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${chainInfo.moralis}`,
       { headers: { "X-API-Key": process.env.MORALIS_KEY } }
     );
-    const tokens = await tokenRes.json();
+    const tokenJson = await tokenRes.json();
+    const tokens = tokenJson || [];
 
-    // 2. Fetch native balance
-    const nativeRes = await fetch(
-      `https://deep-index.moralis.io/api/v2.2/${address}/balance?chain=${moralisChain}`,
-      { headers: { "X-API-Key": process.env.MORALIS_KEY } }
-    );
-    const nativeData = await nativeRes.json();
+    // Collect token addresses
+    const tokenAddresses = tokens.map(t => t.token_address?.toLowerCase()).filter(Boolean);
+    let priceData = {};
 
-    // 3. Build items array (mimic Covalent fields)
-    const items = [];
-
-    // Native coin
-    if (nativeData.balance) {
-      const symbol = moralisChain === "0x1" ? "ETH" : "BNB";
-      const priceRes = await fetch(`${req.protocol}://${req.get("host")}/price/${symbol}`);
-      const priceData = await priceRes.json();
-      items.push({
-        contract_address: "native",
-        contract_ticker_symbol: symbol,
-        contract_decimals: 18,
-        balance: nativeData.balance,
-        quote: priceData.usd || 0,
-      });
+    if (tokenAddresses.length) {
+      const priceRes = await fetch(
+        `https://api.coingecko.com/api/v3/simple/token_price/${chainInfo.coingecko}?contract_addresses=${tokenAddresses.join(",")}&vs_currencies=usd`
+      );
+      priceData = await priceRes.json();
     }
 
-    // Tokens
-    for (const t of tokens) {
-      let usd = 0;
-      try {
-        const priceRes = await fetch(`${req.protocol}://${req.get("host")}/price/${t.symbol}`);
-        const priceData = await priceRes.json();
-        usd = priceData.usd || 0;
-      } catch (e) {}
+    // Normalize to Covalent-like items[]
+    const items = tokens.map(t => {
+      const addr = t.token_address?.toLowerCase();
+      const decimals = Number(t.decimals) || 18;
+      const raw = t.balance || "0";
+      const price = priceData[addr]?.usd || 0;
+      const balanceFloat = Number(raw) / (10 ** decimals);
 
-      items.push({
-        contract_address: t.token_address,
+      return {
+        contract_address: addr,
         contract_ticker_symbol: t.symbol,
-        contract_decimals: Number(t.decimals),
-        balance: t.balance,
-        quote: usd,
-      });
-    }
+        balance: raw,
+        contract_decimals: decimals,
+        quote: balanceFloat * price,
+      };
+    });
 
-    const data = { data: { items } }; // wrap in Covalent-style
+    res.json({ data: { items } });
 
-    // Cache it
-    balanceCache[key] = { data, timestamp: Date.now() };
-
-    return res.json(data);
   } catch (err) {
     console.error("Balance API error:", err);
-    res.status(500).json({ error: "Failed to fetch balance" });
+    res.status(500).json({ error: "Failed to fetch balances" });
   }
 });
+
 
 
 
