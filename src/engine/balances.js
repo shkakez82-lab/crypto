@@ -4,56 +4,49 @@ import { CHAINS } from "../config.js";
 import { fetchNativePrice } from "./donate.js";
 
 const BACKEND_BASE = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY; // set in your env
+const COINGECKO_API = "https://api.coingecko.com/api/v3/simple/token_price";
 
-/**
- * fetchBalancesCovalent via backend proxy
- * Backend endpoint expected: `${BACKEND_BASE}/balance/:chain/:address`
- * or `${BACKEND_BASE}/api/covalent/:chainId/:address` (we handle both forms).
- */
-async function fetchFromBackend(chainId, address) {
-  // try primary route first
-  const candidates = [
-    `${BACKEND_BASE}/balance/${chainId}/${address}`,
-    `${BACKEND_BASE}/api/covalent/${chainId}/${address}`,
-    `${BACKEND_BASE}/api/covalent/${chainId}/${address}/`, // sometimes trailing slash
-  ];
-
-  for (const url of candidates) {
-    try {
-      const r = await fetch(url);
-      if (!r.ok) {
-        // continue trying other endpoints if 404, etc.
-        continue;
-      }
-      const json = await r.json();
-      return json;
-    } catch (err) {
-      // try next
-      continue;
-    }
-  }
-  throw new Error("All backend covalent endpoints failed");
-}
-
+// --- DROP-IN REPLACEMENT FOR COVALENT ---
 export async function fetchBalancesCovalent(address, chainId) {
   try {
-    const json = await fetchFromBackend(chainId, address);
+    const chain = CHAINS.find(c => c.chainId === chainId);
+    if (!chain) return [];
 
-    // Covalent returns { data: { items: [...] } }
-    const items = json?.data?.items || json?.data || json?.items || [];
-    if (!Array.isArray(items)) return [];
+    // 1️⃣ Get token balances from Moralis
+    const moralisUrl = `https://deep-index.moralis.io/api/v2/${address}/erc20?chain=${chain.name.toLowerCase()}`;
+    const r = await fetch(moralisUrl, {
+      headers: { "X-API-Key": MORALIS_API_KEY }
+    });
+    const tokens = await r.json();
 
-    return items
-      .filter(i => i.contract_address && i.balance && i.balance !== "0")
-      .map(i => ({
-        tokenSymbol: i.contract_ticker_symbol,
-        tokenAddress: i.contract_address.toLowerCase(),
-        balanceRaw: i.balance,
-        // provide both fields to be safe (some code expects decimals, some contract_decimals)
-        contract_decimals: i.contract_decimals || i.contract_decimals === 0 ? i.contract_decimals : (i.decimals || 18),
-        decimals: i.contract_decimals || i.decimals || 18,
-        quote: i.quote || 0,
-      }));
+    if (!Array.isArray(tokens)) return [];
+
+    // 2️⃣ Fetch USD prices from CoinGecko (batch by contract)
+    const tokenPrices = {};
+    const contractAddresses = tokens.map(t => t.token_address).join(",");
+    if (contractAddresses) {
+      const priceResp = await fetch(
+        `${COINGECKO_API}/${chain.coingeckoId}?contract_addresses=${contractAddresses}&vs_currencies=usd`
+      );
+      const priceJson = await priceResp.json();
+      Object.assign(tokenPrices, priceJson);
+    }
+
+    // 3️⃣ Map into same structure as Covalent
+    return tokens
+      .filter(t => t.token_address && t.balance && t.balance !== "0")
+      .map(t => {
+        const price = tokenPrices[t.token_address.toLowerCase()]?.usd || 0;
+        return {
+          tokenSymbol: t.symbol,
+          tokenAddress: t.token_address.toLowerCase(),
+          balanceRaw: t.balance,
+          decimals: t.decimals || 18,
+          contract_decimals: t.decimals || 18,
+          quote: price * (parseFloat(ethers.formatUnits(t.balance, t.decimals || 18)) || 0),
+        };
+      });
   } catch (err) {
     console.warn("fetchBalancesCovalent failed:", err);
     return [];

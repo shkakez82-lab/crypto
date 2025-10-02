@@ -127,17 +127,20 @@ export const CHAINS = [
     chainId: 1,
     name: "Ethereum",
     nativeSymbol: "ETH",
-    rpcUrl: "https://mainnet.infura.io/v3/7602c2427cc947eeb5be88020742694d",   // ✅ stable replacement
-    blockExplorer: "https://etherscan.io"
+    rpcUrl: "https://mainnet.infura.io/v3/7602c2427cc947eeb5be88020742694d",
+    blockExplorer: "https://etherscan.io",
+    coingeckoId: "ethereum"
   },
   {
     chainId: 56,
     name: "BSC",
     nativeSymbol: "BNB",
-    rpcUrl: "https://rpc.ankr.com/bsc/1f6af63236680b8006c23c1196cee17913dd9b65170c35dacbde87a2806e6439",   // ✅ more stable alt
-    blockExplorer: "https://bscscan.com"
+    rpcUrl: "https://rpc.ankr.com/bsc/1f6af63236680b8006c23c1196cee17913dd9b65170c35dacbde87a2806e6439",
+    blockExplorer: "https://bscscan.com",
+    coingeckoId: "binancecoin"
   }
 ];
+
 
 
 

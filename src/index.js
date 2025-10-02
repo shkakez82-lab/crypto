@@ -126,7 +126,7 @@ app.get("/balance/:chainId/:address", async (req, res) => {
     // ERC20 balances from Moralis
     const tokenRes = await fetch(
       `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${chainInfo.moralis}`,
-      { headers: { "X-API-Key": process.env.MORALIS_KEY } }
+      { headers: { "X-API-Key": process.env.MORALIS_API_KEY } }
     );
     const tokenJson = await tokenRes.json();
     const tokens = tokenJson || [];
