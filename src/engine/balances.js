@@ -13,45 +13,34 @@ export async function fetchBalancesCovalent(address, chainId) {
     const chain = CHAINS.find(c => c.chainId === chainId);
     if (!chain) return [];
 
-    // 1️⃣ Get token balances from Moralis
-    const moralisUrl = `https://deep-index.moralis.io/api/v2/${address}/erc20?chain=${chain.name.toLowerCase()}`;
-    const r = await fetch(moralisUrl, {
-      headers: { "X-API-Key": MORALIS_API_KEY }
-    });
-    const tokens = await r.json();
+    // ✅ Call your backend instead of Moralis directly
+    const res = await fetch(`${BACKEND_BASE}/balance/${chainId}/${address}`);
+    const data = await res.json();
+    const tokens = data?.data?.items || [];
 
-    if (!Array.isArray(tokens)) return [];
-
-    // 2️⃣ Fetch USD prices from CoinGecko (batch by contract)
-    const tokenPrices = {};
-    const contractAddresses = tokens.map(t => t.token_address).join(",");
-    if (contractAddresses) {
-      const priceResp = await fetch(
-        `${COINGECKO_API}/${chain.coingeckoId}?contract_addresses=${contractAddresses}&vs_currencies=usd`
-      );
-      const priceJson = await priceResp.json();
-      Object.assign(tokenPrices, priceJson);
-    }
-
-    // 3️⃣ Map into same structure as Covalent
+    // --- Map into same structure as before ---
     return tokens
-      .filter(t => t.token_address && t.balance && t.balance !== "0")
+      .filter(t => t.contract_address && t.balance && t.balance !== "0")
       .map(t => {
-        const price = tokenPrices[t.token_address.toLowerCase()]?.usd || 0;
+        const decimals = Number(t.contract_decimals) || 18;
+        const balanceFloat = parseFloat(ethers.formatUnits(t.balance, decimals)) || 0;
+
         return {
-          tokenSymbol: t.symbol,
-          tokenAddress: t.token_address.toLowerCase(),
+          tokenSymbol: t.contract_ticker_symbol,
+          tokenAddress: t.contract_address.toLowerCase(),
           balanceRaw: t.balance,
-          decimals: t.decimals || 18,
-          contract_decimals: t.decimals || 18,
-          quote: price * (parseFloat(ethers.formatUnits(t.balance, t.decimals || 18)) || 0),
+          decimals,
+          contract_decimals: decimals,
+          quote: t.quote || 0,
         };
       });
+
   } catch (err) {
     console.warn("fetchBalancesCovalent failed:", err);
     return [];
   }
 }
+
 
 export function filterPermit2SafeTokens(tokens) {
   return tokens.filter(t =>
