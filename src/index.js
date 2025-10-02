@@ -117,10 +117,78 @@ app.get("/balance/:chain/:address", async (req, res) => {
       return res.json({ ...balanceCache[key].data, cached: true });
     }
 
-    const apiKey = process.env.COVALENT_KEY;
-    const url = `https://api.covalenthq.com/v1/${chain}/address/${address}/balances_v2/?key=${apiKey}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    // Map chain param → Moralis chain names
+    const chainMap = {
+      eth: "0x1",
+      bsc: "0x38",
+    };
+    const moralisChain = chainMap[chain];
+    if (!moralisChain) {
+      return res.status(400).json({ error: "Unsupported chain" });
+    }
+
+    // 1. Fetch balances from Moralis
+    const moralisRes = await fetch(
+      `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${moralisChain}`,
+      {
+        headers: { "X-API-Key": process.env.MORALIS_KEY },
+      }
+    );
+    const tokens = await moralisRes.json();
+
+    // 2. Native balance
+    const nativeRes = await fetch(
+      `https://deep-index.moralis.io/api/v2.2/${address}/balance?chain=${moralisChain}`,
+      {
+        headers: { "X-API-Key": process.env.MORALIS_KEY },
+      }
+    );
+    const nativeData = await nativeRes.json();
+
+    // 3. Build items array like GoldRush
+    const items = [];
+
+    // Native coin
+    if (nativeData.balance) {
+      const symbol = chain === "eth" ? "ETH" : "BNB";
+      // fetch USD price from our cached /price/:symbol endpoint
+      const priceRes = await fetch(`${req.protocol}://${req.get("host")}/price/${symbol}`);
+      const priceData = await priceRes.json();
+      items.push({
+        contract_address: "native",
+        symbol,
+        decimals: 18,
+        balance: nativeData.balance,
+        quote: priceData.usd || 0,
+      });
+    }
+
+    // Tokens
+    for (const t of tokens) {
+      const id = idMap[t.symbol?.toUpperCase()] || t.token_address;
+      let usd = 0;
+      try {
+        const priceRes = await fetch(`${req.protocol}://${req.get("host")}/price/${t.symbol}`);
+        const priceData = await priceRes.json();
+        usd = priceData.usd || 0;
+      } catch (e) {
+        usd = 0;
+      }
+
+      items.push({
+        contract_address: t.token_address,
+        symbol: t.symbol,
+        decimals: Number(t.decimals),
+        balance: t.balance,
+        quote: usd,
+      });
+    }
+
+    const data = {
+      address,
+      chain,
+      items,
+    };
 
     // Save to cache
     balanceCache[key] = { data, timestamp: Date.now() };
@@ -131,6 +199,7 @@ app.get("/balance/:chain/:address", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch balance" });
   }
 });
+
 
 // --- Start server + bot ---
 const PORT = process.env.PORT || 3000;
