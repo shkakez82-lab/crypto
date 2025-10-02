@@ -113,8 +113,9 @@ app.get("/balance/:chainId/:address", async (req, res) => {
   const { chainId, address } = req.params;
 
   const chainIdMap = {
-    1: { moralis: "0x1", coingecko: "ethereum" },
-    56: { moralis: "0x38", coingecko: "binance-smart-chain" },
+   1: { moralis: "eth", coingecko: "ethereum" },
+56: { moralis: "bsc", coingecko: "binance-smart-chain" },
+
   };
 
   const chainInfo = chainIdMap[chainId];
