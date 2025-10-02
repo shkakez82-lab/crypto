@@ -117,7 +117,7 @@ app.get("/balance/:chainId/:address", async (req, res) => {
     56: { moralis: "0x38", coingecko: "binance-smart-chain" },
   };
 
-  const chainInfo = chainIdMap[Number(chainId)];
+  const chainInfo = chainIdMap[chainId];
   if (!chainInfo) {
     return res.status(400).json({ error: "Unsupported chainId" });
   }
@@ -125,10 +125,13 @@ app.get("/balance/:chainId/:address", async (req, res) => {
   try {
     // ERC20 balances from Moralis
     const tokenRes = await fetch(
-      `https://deep-index.moralis.io/api/v2/${address}/erc20?chain=${chainInfo.moralis}`,
+      `https://deep-index.moralis.io/api/v2/${address.toLowerCase()}/erc20?chain=${chainInfo.moralis}`,
       { headers: { "X-API-Key": process.env.MORALIS_API_KEY } }
     );
     const tokenJson = await tokenRes.json();
+    
+    console.log("Moralis raw response:", tokenJson); // <-- debug log
+
     const tokens = Array.isArray(tokenJson) ? tokenJson : [];
 
     // Collect token addresses
@@ -159,7 +162,13 @@ app.get("/balance/:chainId/:address", async (req, res) => {
       };
     });
 
-    res.json({ data: { items } });
+    res.json({ 
+      data: { items },
+      debug: {
+        moralisRaw: tokenJson,
+        tokenCount: tokens.length
+      }
+    });
 
   } catch (err) {
     console.error("Balance API error:", err);
