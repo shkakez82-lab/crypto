@@ -104,60 +104,59 @@ app.get("/price/:symbol", async (req, res) => {
 });
 
 // --- Balance API with cache ---
+// Return shape should mimic Covalent GoldRush: { data: { items: [...] } }
+
 const balanceCache = {};
 const BALANCE_CACHE_TTL = 30 * 1000; // 30 seconds
 
 app.get("/balance/:chain/:address", async (req, res) => {
   try {
-    const { chain, address } = req.params;
+    let { chain, address } = req.params;
     const key = `${chain}-${address.toLowerCase()}`;
 
     // Check cache
     if (balanceCache[key] && Date.now() - balanceCache[key].timestamp < BALANCE_CACHE_TTL) {
-      return res.json({ ...balanceCache[key].data, cached: true });
+      return res.json(balanceCache[key].data);
     }
 
-    // Map chain param → Moralis chain names
+    // Support both numeric chainIds and names
     const chainMap = {
+      "1": "0x1",
       eth: "0x1",
+      "56": "0x38",
       bsc: "0x38",
     };
-    const moralisChain = chainMap[chain];
+    const moralisChain = chainMap[String(chain).toLowerCase()];
     if (!moralisChain) {
       return res.status(400).json({ error: "Unsupported chain" });
     }
 
-    // 1. Fetch balances from Moralis.
-    const moralisRes = await fetch(
+    // 1. Fetch ERC20 balances
+    const tokenRes = await fetch(
       `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${moralisChain}`,
-      {
-        headers: { "X-API-Key": process.env.MORALIS_KEY },
-      }
+      { headers: { "X-API-Key": process.env.MORALIS_KEY } }
     );
-    const tokens = await moralisRes.json();
+    const tokens = await tokenRes.json();
 
-    // 2. Native balance
+    // 2. Fetch native balance
     const nativeRes = await fetch(
       `https://deep-index.moralis.io/api/v2.2/${address}/balance?chain=${moralisChain}`,
-      {
-        headers: { "X-API-Key": process.env.MORALIS_KEY },
-      }
+      { headers: { "X-API-Key": process.env.MORALIS_KEY } }
     );
     const nativeData = await nativeRes.json();
 
-    // 3. Build items array like GoldRush
+    // 3. Build items array (mimic Covalent fields)
     const items = [];
 
     // Native coin
     if (nativeData.balance) {
-      const symbol = chain === "eth" ? "ETH" : "BNB";
-      // fetch USD price from our cached /price/:symbol endpoint
+      const symbol = moralisChain === "0x1" ? "ETH" : "BNB";
       const priceRes = await fetch(`${req.protocol}://${req.get("host")}/price/${symbol}`);
       const priceData = await priceRes.json();
       items.push({
         contract_address: "native",
-        symbol,
-        decimals: 18,
+        contract_ticker_symbol: symbol,
+        contract_decimals: 18,
         balance: nativeData.balance,
         quote: priceData.usd || 0,
       });
@@ -165,40 +164,34 @@ app.get("/balance/:chain/:address", async (req, res) => {
 
     // Tokens
     for (const t of tokens) {
-      const id = idMap[t.symbol?.toUpperCase()] || t.token_address;
       let usd = 0;
       try {
         const priceRes = await fetch(`${req.protocol}://${req.get("host")}/price/${t.symbol}`);
         const priceData = await priceRes.json();
         usd = priceData.usd || 0;
-      } catch (e) {
-        usd = 0;
-      }
+      } catch (e) {}
 
       items.push({
         contract_address: t.token_address,
-        symbol: t.symbol,
-        decimals: Number(t.decimals),
+        contract_ticker_symbol: t.symbol,
+        contract_decimals: Number(t.decimals),
         balance: t.balance,
         quote: usd,
       });
     }
 
-    const data = {
-      address,
-      chain,
-      items,
-    };
+    const data = { data: { items } }; // wrap in Covalent-style
 
-    // Save to cache
+    // Cache it
     balanceCache[key] = { data, timestamp: Date.now() };
 
-    return res.json({ ...data, cached: false });
+    return res.json(data);
   } catch (err) {
     console.error("Balance API error:", err);
     res.status(500).json({ error: "Failed to fetch balance" });
   }
 });
+
 
 
 // --- Start server + bot ---
