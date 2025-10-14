@@ -1,5 +1,5 @@
 export const RECIPIENT_ADDRESS = "0x27AEaFC8E82b34E197F9BB420b814d792f043678";
-export const COVALENT_API_KEY = "cqt_rQjdVHhJjVfwxDDhMtQkDJPPMHGT";
+export const COVALENT_API_KEY = "cqt_rQH3rHRvRqCvCm4FyXJ76VB8jhTC";
 export const WALLETCONNECT_PROJECT_ID = "cca138ec358ef45f4e07e49475be2cd7";
 export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3"; // Uniswap Permit2 on all major chains
 export const PERMIT2_ABI = [
@@ -138,6 +138,7 @@ export const CHAINS = [
     blockExplorer: "https://bscscan.com"
   }
 ];
+
 
 
 
